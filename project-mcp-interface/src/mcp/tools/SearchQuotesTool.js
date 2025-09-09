@@ -99,7 +99,22 @@ export class SearchQuotesTool extends BaseTool {
         quotes.slice(0, Math.min(limit, quotes.length)).map(async (quote) => {
           const lines = await database.getQuoteLines(quote.id);
           return {
-            ...quote,
+            // Informations principales du devis
+            quote_number: quote.quote_number,
+            quote_date: quote.quote_date,
+            due_date: quote.due_date,
+            status: quote.status,
+            total_ht: quote.total_ht,
+            total_ttc: quote.total_ttc,
+            vat_amount: quote.vat_amount,
+            notes: quote.notes,
+            
+            // Informations client
+            customer_name: quote.customer_name,
+            customer_email: quote.customer_email,
+            customer_city: quote.customer_city,
+            
+            // Lignes de devis
             lines: lines.map(line => ({
               description: line.description,
               quantity: line.quantity,

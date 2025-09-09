@@ -108,7 +108,23 @@ export class SearchInvoicesTool extends BaseTool {
         invoices.slice(0, Math.min(limit, invoices.length)).map(async (invoice) => {
           const lines = await database.getInvoiceLines(invoice.id);
           return {
-            ...invoice,
+            // Informations principales de la facture
+            invoice_number: invoice.invoice_number,
+            invoice_date: invoice.invoice_date,
+            due_date: invoice.due_date,
+            status: invoice.status,
+            payment_mode: invoice.payment_mode,
+            total_ht: invoice.total_ht,
+            total_ttc: invoice.total_ttc,
+            vat_amount: invoice.vat_amount,
+            notes: invoice.notes,
+            
+            // Informations client
+            customer_name: invoice.customer_name,
+            customer_email: invoice.customer_email,
+            customer_city: invoice.customer_city,
+            
+            // Lignes de facture
             lines: lines.map(line => ({
               description: line.description,
               quantity: line.quantity,
