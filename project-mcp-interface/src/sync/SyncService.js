@@ -206,8 +206,8 @@ export class SyncService {
       await this.database.upsertQuote(cleanQuote);
       
       // Synchroniser les lignes du devis si elles sont incluses dans la réponse
-      if (quote.lines && Array.isArray(quote.lines) && quote.lines.length > 0) {
-        await this.syncQuoteLines(quote.id, quote.lines);
+      if (quote.items && Array.isArray(quote.items) && quote.items.length > 0) {
+        await this.syncQuoteLines(quote.id, quote.items);
       }
       
       count++;
@@ -219,30 +219,37 @@ export class SyncService {
   /**
    * Synchronise les lignes d'un devis
    * @param {number} quoteId - ID du devis
-   * @param {Array} lines - Lignes du devis
+   * @param {Array} items - Items du devis (lignes de détail)
    */
-  async syncQuoteLines(quoteId, lines) {
+  async syncQuoteLines(quoteId, items) {
     // Supprimer les anciennes lignes
     await this.database.run('DELETE FROM quote_lines WHERE quote_id = ?', [quoteId]);
 
     // Insérer les nouvelles lignes
-    for (const line of lines) {
+    for (const item of items) {
+      // Calculer le total HT et TTC
+      const quantity = parseFloat(item.quantity) || 0;
+      const unitPrice = parseFloat(item.unit_price) || 0;
+      const vatRate = parseFloat(item.vat) || 0;
+      const totalHT = quantity * unitPrice;
+      const totalTTC = totalHT * (1 + vatRate);
+
       await this.database.run(`
         INSERT INTO quote_lines 
         (quote_id, product_id, description, quantity, unit_price, vat_rate, total_ht, total_ttc, line_order, created_at, updated_at, last_sync)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `, [
         quoteId,
-        line.product_id || null,
-        line.description || '',
-        line.quantity || 0,
-        line.unit_price || 0,
-        line.vat_rate || 0,
-        line.total_ht || 0,
-        line.total_ttc || 0,
-        line.line_order || 0,
-        line.created_at || null,
-        line.updated_at || null
+        item.product_id || null,
+        item.title || '', // Utiliser title au lieu de description
+        quantity,
+        unitPrice,
+        vatRate,
+        totalHT,
+        totalTTC,
+        item.position || 0, // Utiliser position au lieu de line_order
+        item.created_at || null,
+        item.updated_at || null
       ]);
     }
   }
@@ -283,8 +290,8 @@ export class SyncService {
       await this.database.upsertInvoice(cleanInvoice);
       
       // Synchroniser les lignes de la facture si elles sont incluses dans la réponse
-      if (invoice.lines && Array.isArray(invoice.lines) && invoice.lines.length > 0) {
-        await this.syncInvoiceLines(invoice.id, invoice.lines);
+      if (invoice.items && Array.isArray(invoice.items) && invoice.items.length > 0) {
+        await this.syncInvoiceLines(invoice.id, invoice.items);
       }
       
       count++;
@@ -296,30 +303,37 @@ export class SyncService {
   /**
    * Synchronise les lignes d'une facture
    * @param {number} invoiceId - ID de la facture
-   * @param {Array} lines - Lignes de la facture
+   * @param {Array} items - Items de la facture (lignes de détail)
    */
-  async syncInvoiceLines(invoiceId, lines) {
+  async syncInvoiceLines(invoiceId, items) {
     // Supprimer les anciennes lignes
     await this.database.run('DELETE FROM invoice_lines WHERE invoice_id = ?', [invoiceId]);
 
     // Insérer les nouvelles lignes
-    for (const line of lines) {
+    for (const item of items) {
+      // Calculer le total HT et TTC
+      const quantity = parseFloat(item.quantity) || 0;
+      const unitPrice = parseFloat(item.unit_price) || 0;
+      const vatRate = parseFloat(item.vat) || 0;
+      const totalHT = quantity * unitPrice;
+      const totalTTC = totalHT * (1 + vatRate);
+
       await this.database.run(`
         INSERT INTO invoice_lines 
         (invoice_id, product_id, description, quantity, unit_price, vat_rate, total_ht, total_ttc, line_order, created_at, updated_at, last_sync)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `, [
         invoiceId,
-        line.product_id || null,
-        line.description || '',
-        line.quantity || 0,
-        line.unit_price || 0,
-        line.vat_rate || 0,
-        line.total_ht || 0,
-        line.total_ttc || 0,
-        line.line_order || 0,
-        line.created_at || null,
-        line.updated_at || null
+        item.product_id || null,
+        item.title || '', // Utiliser title au lieu de description
+        quantity,
+        unitPrice,
+        vatRate,
+        totalHT,
+        totalTTC,
+        item.position || 0, // Utiliser position au lieu de line_order
+        item.created_at || null,
+        item.updated_at || null
       ]);
     }
   }

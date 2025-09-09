@@ -4,6 +4,9 @@ import { SearchInvoicesTool } from './tools/SearchInvoicesTool.js';
 import { AnalyzePricingTool } from './tools/AnalyzePricingTool.js';
 import { GetSimilarProjectsTool } from './tools/GetSimilarProjectsTool.js';
 import { CalculateRevenueTool } from './tools/CalculateRevenueTool.js';
+import { AnalyzeProjectBriefTool } from './tools/AnalyzeProjectBriefTool.js';
+import { FindSimilarProjectsAdvancedTool } from './tools/FindSimilarProjectsAdvancedTool.js';
+import { EstimateProjectCostTool } from './tools/EstimateProjectCostTool.js';
 import { config } from '../config.js';
 
 /**
@@ -26,7 +29,10 @@ export class FunctionalFacturationMCPServer {
       new SearchInvoicesTool(),
       new AnalyzePricingTool(),
       new GetSimilarProjectsTool(),
-      new CalculateRevenueTool()
+      new CalculateRevenueTool(),
+      new AnalyzeProjectBriefTool(),
+      new FindSimilarProjectsAdvancedTool(),
+      new EstimateProjectCostTool()
     ];
 
     tools.forEach(tool => {
