@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS quotes (
     facturation_id INTEGER UNIQUE NOT NULL,
     customer_id INTEGER NOT NULL,
     quote_number TEXT UNIQUE NOT NULL,
+    quote_ref INTEGER, -- Numéro séquentiel du devis
     quote_date DATE NOT NULL,
     due_date DATE,
     status INTEGER DEFAULT 0, -- 0: En attente, 1: Accepté, 9: Refusé
@@ -89,6 +90,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     facturation_id INTEGER UNIQUE NOT NULL,
     customer_id INTEGER NOT NULL,
     invoice_number TEXT UNIQUE NOT NULL,
+    invoice_ref INTEGER, -- Numéro séquentiel de la facture
     invoice_date DATE NOT NULL,
     due_date DATE,
     payment_mode INTEGER DEFAULT 0,

@@ -101,7 +101,7 @@ export class SearchQuotesTool extends BaseTool {
           return {
             // Informations principales du devis
             quote_number: quote.quote_number,
-            quote_id: quote.id, // Numéro séquentiel simple
+            quote_ref: quote.quote_ref, // Vrai numéro séquentiel de l'API
             quote_date: quote.quote_date,
             due_date: quote.due_date,
             status: quote.status,

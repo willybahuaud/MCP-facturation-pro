@@ -110,7 +110,7 @@ export class SearchInvoicesTool extends BaseTool {
           return {
             // Informations principales de la facture
             invoice_number: invoice.invoice_number,
-            invoice_id: invoice.id, // Numéro séquentiel simple
+            invoice_ref: invoice.invoice_ref, // Vrai numéro séquentiel de l'API
             invoice_date: invoice.invoice_date,
             due_date: invoice.due_date,
             status: invoice.status,

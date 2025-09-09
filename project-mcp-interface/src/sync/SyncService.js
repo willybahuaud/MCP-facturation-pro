@@ -195,6 +195,7 @@ export class SyncService {
       const cleanQuote = {
         ...quote,
         quote_number: quoteNumber,
+        quote_ref: quote.quote_ref || null, // Numéro séquentiel du devis
         quote_date: quote.created_at ? quote.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
         total_ht: quote.total || 0,
         total_ttc: quote.total_with_vat || 0,
@@ -274,6 +275,7 @@ export class SyncService {
       const cleanInvoice = {
         ...invoice,
         invoice_number: invoiceNumber,
+        invoice_ref: invoice.invoice_ref || null, // Numéro séquentiel de la facture
         invoice_date: invoice.created_at ? invoice.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
         total_ht: invoice.total || 0,
         total_ttc: invoice.total_with_vat || 0,
