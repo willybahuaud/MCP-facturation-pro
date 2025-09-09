@@ -238,6 +238,7 @@ export class EstimateProjectCostTool extends BaseTool {
       SELECT 
         q.id,
         q.quote_number,
+        q.quote_ref,
         q.quote_date,
         q.total_ttc,
         q.total_ht,

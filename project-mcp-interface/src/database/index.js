@@ -228,14 +228,15 @@ class Database {
   async upsertQuote(quoteData) {
     const sql = `
       INSERT OR REPLACE INTO quotes 
-      (facturation_id, customer_id, quote_number, quote_date, due_date, status, total_ht, total_ttc, vat_amount, notes, created_at, updated_at, last_sync)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      (facturation_id, customer_id, quote_number, quote_ref, quote_date, due_date, status, total_ht, total_ttc, vat_amount, notes, created_at, updated_at, last_sync)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `;
     
     const params = [
       quoteData.id,
       quoteData.customer_id,
       quoteData.quote_number,
+      quoteData.quote_ref || null,
       quoteData.quote_date,
       quoteData.due_date || null,
       quoteData.quote_status || 0,
@@ -253,14 +254,15 @@ class Database {
   async upsertInvoice(invoiceData) {
     const sql = `
       INSERT OR REPLACE INTO invoices 
-      (facturation_id, customer_id, invoice_number, invoice_date, due_date, payment_mode, payment_date, status, paid_on, balance, total_ht, total_ttc, vat_amount, notes, created_at, updated_at, last_sync)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      (facturation_id, customer_id, invoice_number, invoice_ref, invoice_date, due_date, payment_mode, payment_date, status, paid_on, balance, total_ht, total_ttc, vat_amount, notes, created_at, updated_at, last_sync)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `;
     
     const params = [
       invoiceData.id,
       invoiceData.customer_id,
       invoiceData.invoice_number,
+      invoiceData.invoice_ref || null,
       invoiceData.invoice_date,
       invoiceData.due_date || null,
       invoiceData.payment_mode || 0,
