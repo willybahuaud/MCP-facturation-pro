@@ -1,0 +1,153 @@
+# Facturation.PRO MCP Server
+
+Serveur MCP (Model Context Protocol) pour intégrer vos données Facturation.PRO directement dans Cursor.
+
+## 🚀 Installation rapide
+
+### 1. Cloner le projet
+```bash
+git clone <votre-repo>
+cd project-mcp-interface
+```
+
+### 2. Installer les dépendances
+```bash
+npm install
+```
+
+### 3. Configuration automatique
+```bash
+npm run setup:global
+```
+
+Cette commande va :
+- ✅ Configurer automatiquement le serveur MCP global
+- ✅ Créer le wrapper dans `~/.local/bin/`
+- ✅ Mettre à jour la configuration Cursor
+- ✅ Synchroniser vos données Facturation.PRO
+
+### 4. Redémarrer Cursor
+Fermez et rouvrez Cursor pour que les outils MCP soient disponibles.
+
+## 🛠️ Configuration manuelle
+
+Si l'installation automatique ne fonctionne pas :
+
+### 1. Configurer les variables d'environnement
+```bash
+cp env.example .env
+```
+
+Éditez `.env` avec vos informations Facturation.PRO :
+```env
+FACTURATION_API_ID=votre_api_id
+FACTURATION_API_KEY=votre_api_key
+FACTURATION_FIRM_ID=votre_firm_id
+```
+
+### 2. Synchroniser les données
+```bash
+npm run sync
+```
+
+### 3. Installer le serveur MCP global
+```bash
+npm run install:global
+```
+
+### 4. Configurer Cursor
+Ajoutez dans `~/.cursor/mcp.json` :
+```json
+{
+  "mcpServers": {
+    "facturation-pro": {
+      "command": "/Users/willy/.local/bin/facturation-pro-mcp-wrapper"
+    }
+  }
+}
+```
+
+## 📋 Scripts disponibles
+
+- `npm start` - Démarrer le serveur MCP local
+- `npm run sync` - Synchroniser les données depuis l'API
+- `npm run setup:global` - Installation complète automatique
+- `npm run install:global` - Installer le serveur MCP global uniquement
+- `npm run uninstall:global` - Désinstaller le serveur MCP global
+
+## 🎯 Outils MCP disponibles
+
+Une fois configuré, vous aurez accès à ces outils dans Cursor :
+
+### 1. **search_quotes** - Recherche de devis
+- Recherche par numéro, client, description
+- Filtres par statut, dates
+- Exemple : "Recherche mes 5 plus gros devis"
+
+### 2. **search_invoices** - Recherche de factures
+- Recherche par numéro, client, description
+- Filtres par statut, mode de paiement, dates
+- Exemple : "Trouve toutes les factures non payées"
+
+### 3. **analyze_pricing** - Analyse des tarifs
+- Statistiques de facturation
+- Moyennes par produit/client
+- Exemple : "Analyse les tarifs de mes produits"
+
+### 4. **get_similar_projects** - Projets similaires
+- Recherche par mots-clés
+- Filtres par montant
+- Exemple : "Trouve des projets similaires à 'développement web'"
+
+## 🔧 Dépannage
+
+### Le serveur MCP ne s'affiche pas dans Cursor
+1. Vérifiez que `~/.cursor/mcp.json` existe et contient la bonne configuration
+2. Redémarrez complètement Cursor
+3. Vérifiez les logs dans la console de développement de Cursor
+
+### Erreur de synchronisation
+1. Vérifiez vos identifiants API dans `.env`
+2. Testez la connexion : `npm run test:connection`
+3. Relancez la synchronisation : `npm run sync`
+
+### Le serveur ne répond pas
+1. Vérifiez que le wrapper est installé : `ls -la ~/.local/bin/facturation-pro-mcp-wrapper`
+2. Testez manuellement : `echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | ~/.local/bin/facturation-pro-mcp-wrapper`
+
+## 📁 Structure du projet
+
+```
+project-mcp-interface/
+├── src/
+│   ├── api/                 # Client API Facturation.PRO
+│   ├── database/            # Gestion base de données SQLite
+│   ├── mcp/                 # Serveur MCP et outils
+│   └── sync/                # Service de synchronisation
+├── data/
+│   └── facturation.db       # Base de données locale
+├── scripts/
+│   └── install-global.js    # Script d'installation globale
+└── README.md
+```
+
+## 🔐 Sécurité
+
+- Les clés API sont stockées dans `.env` (ne pas commiter)
+- La base de données est locale (pas de données envoyées à des tiers)
+- Communication sécurisée avec l'API Facturation.PRO
+
+## 📞 Support
+
+En cas de problème :
+1. Vérifiez les logs de synchronisation
+2. Testez la connexion API
+3. Consultez la documentation Facturation.PRO : https://facturation.dev/llm
+
+## 🎉 Utilisation
+
+Une fois configuré, utilisez simplement des commandes naturelles dans Cursor :
+- "Recherche mes 5 plus gros devis"
+- "Trouve tous les devis de Terrena"
+- "Analyse les tarifs de mes produits"
+- "Factures non payées ce mois"

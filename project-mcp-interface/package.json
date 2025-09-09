@@ -1,0 +1,32 @@
+{
+  "name": "facturation-pro-mcp",
+  "version": "1.0.0",
+  "description": "Serveur MCP pour synchroniser et analyser les données Facturation.PRO",
+  "main": "src/functional-index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/functional-index.js",
+    "dev": "node --watch src/functional-index.js",
+    "sync": "node src/sync.js",
+    "setup": "node src/setup.js",
+    "setup:global": "node scripts/install-global.js",
+    "install:global": "node scripts/install-global.js",
+    "uninstall:global": "node scripts/uninstall-global.js",
+    "test:connection": "node -e \"import { FacturationApiClient } from './src/api/FacturationApiClient.js'; const api = new FacturationApiClient(); api.testConnection().then(connected => console.log('Connexion API:', connected ? 'OK' : 'ÉCHEC'));\""
+  },
+  "keywords": ["mcp", "facturation", "api", "sync"],
+  "author": "Willy",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0",
+    "axios": "^1.6.0",
+    "sqlite3": "^5.1.6",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.3",
+    "inquirer": "^9.2.12",
+    "chalk": "^5.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
