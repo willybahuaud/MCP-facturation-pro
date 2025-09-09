@@ -233,6 +233,7 @@ export class EstimateProjectCostTool extends BaseTool {
     const finalMinAmount = minAmount || defaultMinAmount;
     const finalMaxAmount = maxAmount || (defaultMinAmount * 20); // Maximum 20x le minimum
     
+    // Recherche simplifiée car les quote_lines sont vides
     let sql = `
       SELECT 
         q.id,
@@ -242,19 +243,17 @@ export class EstimateProjectCostTool extends BaseTool {
         q.total_ht,
         q.notes,
         c.name as customer_name,
-        GROUP_CONCAT(ql.description, ' | ') as descriptions
+        c.city as customer_city
       FROM quotes q
       LEFT JOIN customers c ON q.customer_id = c.id
-      LEFT JOIN quote_lines ql ON q.id = ql.quote_id
       WHERE q.total_ttc >= ? AND q.total_ttc <= ? AND q.total_ttc > 0
-      GROUP BY q.id 
       ORDER BY q.quote_date DESC
       LIMIT ?
     `;
 
-    const quotes = await database.all(sql, [finalMinAmount, finalMaxAmount, limit * 3]);
+    const quotes = await database.all(sql, [finalMinAmount, finalMaxAmount, limit * 2]);
 
-    // Calculer la similarité et filtrer
+    // Calculer la similarité basée sur les montants et les données disponibles
     const projectsWithSimilarity = quotes.map(quote => {
       const similarity = this.calculateSimilarity(briefAnalysis, quote);
       return {
@@ -265,7 +264,7 @@ export class EstimateProjectCostTool extends BaseTool {
     });
 
     return projectsWithSimilarity
-      .filter(p => p.similarity_score > 30) // Seuil plus bas pour avoir plus de résultats
+      .filter(p => p.similarity_score > 10) // Seuil très bas car peu de données
       .sort((a, b) => b.similarity_score - a.similarity_score)
       .slice(0, limit);
   }
@@ -274,51 +273,87 @@ export class EstimateProjectCostTool extends BaseTool {
     let score = 0;
     const reasons = [];
 
-    const projectText = (project.notes + ' ' + project.descriptions).toLowerCase();
+    // Comme les notes sont vides, on se base sur les montants et les données disponibles
+    const projectText = (project.notes || '').toLowerCase();
+    const projectAmount = project.total_ttc;
 
-    // Similarité de type de projet
-    const projectType = this.detectProjectType(projectText);
-    if (projectType === briefAnalysis.project_type) {
-      score += 40;
-      reasons.push(`Même type: ${projectType}`);
+    // Similarité basée sur le montant (40% du score)
+    const amountSimilarity = this.calculateAmountSimilarity(briefAnalysis, projectAmount);
+    score += amountSimilarity.score;
+    if (amountSimilarity.reason) {
+      reasons.push(amountSimilarity.reason);
     }
 
-    // Similarité de complexité
-    const complexity = this.detectComplexity(projectText);
-    if (complexity === briefAnalysis.complexity) {
+    // Similarité basée sur les notes si disponibles (30% du score)
+    if (project.notes && project.notes.trim()) {
+      const projectType = this.detectProjectType(projectText);
+      if (projectType === briefAnalysis.project_type) {
+        score += 30;
+        reasons.push(`Même type détecté: ${projectType}`);
+      }
+    } else {
+      // Si pas de notes, on donne un score de base basé sur le montant
       score += 20;
-      reasons.push(`Même complexité: ${complexity}`);
+      reasons.push('Projet similaire par montant');
     }
 
-    // Similarité de fonctionnalités
-    const projectFeatures = this.extractFeatures(projectText);
-    const commonFeatures = briefAnalysis.features.filter(f => projectFeatures.includes(f));
-    const featureScore = (commonFeatures.length / Math.max(briefAnalysis.features.length, 1)) * 25;
-    score += featureScore;
-    if (commonFeatures.length > 0) {
-      reasons.push(`Fonctionnalités: ${commonFeatures.join(', ')}`);
+    // Similarité basée sur la date (projets récents = plus pertinents) (20% du score)
+    const dateSimilarity = this.calculateDateSimilarity(project.quote_date);
+    score += dateSimilarity.score;
+    if (dateSimilarity.reason) {
+      reasons.push(dateSimilarity.reason);
     }
 
-    // Similarité de technologies
-    const projectTech = this.extractTechnologies(projectText);
-    const commonTech = briefAnalysis.technologies.filter(t => projectTech.includes(t));
-    const techScore = (commonTech.length / Math.max(briefAnalysis.technologies.length, 1)) * 10;
-    score += techScore;
-    if (commonTech.length > 0) {
-      reasons.push(`Technologies: ${commonTech.join(', ')}`);
-    }
-
-    // Similarité de taille
-    const projectSize = this.estimateSize(projectText);
-    if (projectSize === briefAnalysis.size) {
-      score += 5;
-      reasons.push(`Même taille: ${projectSize}`);
+    // Similarité basée sur le client (10% du score)
+    if (project.customer_name) {
+      score += 10;
+      reasons.push(`Client: ${project.customer_name}`);
     }
 
     return {
       score: Math.round(score),
       reasons: reasons
     };
+  }
+
+  calculateAmountSimilarity(briefAnalysis, projectAmount) {
+    const expectedRanges = {
+      'e-commerce': { min: 5000, max: 25000 },
+      'application_web': { min: 3000, max: 15000 },
+      'site_vitrine': { min: 1500, max: 8000 },
+      'mobile': { min: 4000, max: 20000 },
+      'api': { min: 2000, max: 10000 },
+      'cms': { min: 2000, max: 12000 },
+      'blog': { min: 1000, max: 5000 },
+      'portfolio': { min: 1200, max: 6000 },
+      'autre': { min: 1000, max: 8000 }
+    };
+
+    const range = expectedRanges[briefAnalysis.project_type] || expectedRanges['autre'];
+    
+    if (projectAmount >= range.min && projectAmount <= range.max) {
+      return { score: 40, reason: `Montant cohérent: ${projectAmount}€` };
+    } else if (projectAmount >= range.min * 0.5 && projectAmount <= range.max * 1.5) {
+      return { score: 20, reason: `Montant proche: ${projectAmount}€` };
+    } else {
+      return { score: 5, reason: `Montant différent: ${projectAmount}€` };
+    }
+  }
+
+  calculateDateSimilarity(projectDate) {
+    const projectDateObj = new Date(projectDate);
+    const now = new Date();
+    const monthsDiff = (now - projectDateObj) / (1000 * 60 * 60 * 24 * 30);
+
+    if (monthsDiff <= 6) {
+      return { score: 20, reason: 'Projet récent (≤6 mois)' };
+    } else if (monthsDiff <= 12) {
+      return { score: 15, reason: 'Projet récent (≤12 mois)' };
+    } else if (monthsDiff <= 24) {
+      return { score: 10, reason: 'Projet moyennement récent (≤24 mois)' };
+    } else {
+      return { score: 5, reason: 'Projet ancien (>24 mois)' };
+    }
   }
 
   extractPricingInsights(similarProjects) {
