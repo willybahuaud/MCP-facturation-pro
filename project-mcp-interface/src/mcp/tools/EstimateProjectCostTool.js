@@ -1,28 +1,33 @@
 import { BaseTool } from './BaseTool.js';
 
 /**
- * Outil d'estimation de coût de projet
- * Estime le coût d'un projet basé sur l'analyse de brief et projets similaires
+ * Outil de recherche de projets similaires pour estimation
+ * Trouve des projets similaires dans l'historique pour aider à l'estimation
  */
 export class EstimateProjectCostTool extends BaseTool {
   constructor() {
     super(
       'estimate_project_cost',
-      'Estime le coût d\'un projet basé sur l\'analyse de brief et projets similaires',
+      'Trouve des projets similaires dans l\'historique pour aider à l\'estimation de coût',
       {
         brief: {
           type: 'string',
-          description: 'Brief de projet à estimer',
+          description: 'Brief de projet à analyser',
           required: true
         },
         similar_projects_limit: {
           type: 'number',
-          description: 'Nombre de projets similaires à considérer (défaut: 5)',
+          description: 'Nombre de projets similaires à retourner (défaut: 10)',
           required: false
         },
-        include_breakdown: {
-          type: 'boolean',
-          description: 'Inclure le détail par phase (défaut: true)',
+        min_amount: {
+          type: 'number',
+          description: 'Montant minimum des projets à considérer',
+          required: false
+        },
+        max_amount: {
+          type: 'number',
+          description: 'Montant maximum des projets à considérer',
           required: false
         }
       }
@@ -33,27 +38,27 @@ export class EstimateProjectCostTool extends BaseTool {
     try {
       this.validateArgs(args);
 
-      const { brief, similar_projects_limit = 5, include_breakdown = true } = args;
+      const { brief, similar_projects_limit = 10, min_amount, max_amount } = args;
       
-      // Analyser le brief
+      // Analyser le brief pour comprendre le type de projet
       const briefAnalysis = this.analyzeBrief(brief);
       
       // Trouver des projets similaires
-      const similarProjects = await this.findSimilarProjects(database, briefAnalysis, similar_projects_limit);
+      const similarProjects = await this.findSimilarProjects(
+        database, 
+        briefAnalysis, 
+        similar_projects_limit,
+        min_amount,
+        max_amount
+      );
       
-      // Calculer l'estimation
-      const estimation = this.calculateEstimation(briefAnalysis, similarProjects);
-      
-      // Ajouter le détail par phase si demandé
-      if (include_breakdown) {
-        estimation.breakdown = this.generateBreakdown(briefAnalysis, similarProjects);
-      }
-      
+      // Retourner les données brutes pour qu'un LLM externe puisse les analyser
       return this.formatResult({
         brief_analysis: briefAnalysis,
-        similar_projects_used: similarProjects.length,
-        estimation: estimation,
-        confidence: this.calculateConfidence(similarProjects)
+        similar_projects: similarProjects,
+        total_found: similarProjects.length,
+        pricing_insights: this.extractPricingInsights(similarProjects),
+        usage_note: "Utilisez ces données avec un LLM externe pour faire une estimation personnalisée basée sur vos habitudes de tarification"
       });
 
     } catch (error) {
@@ -222,9 +227,11 @@ export class EstimateProjectCostTool extends BaseTool {
     return minimumAmounts[projectType] || 1000;
   }
 
-  async findSimilarProjects(database, briefAnalysis, limit) {
-    // Définir un montant minimum selon le type de projet
-    const minAmount = this.getMinimumAmountForProjectType(briefAnalysis.project_type);
+  async findSimilarProjects(database, briefAnalysis, limit, minAmount, maxAmount) {
+    // Utiliser les montants fournis ou des valeurs par défaut
+    const defaultMinAmount = this.getMinimumAmountForProjectType(briefAnalysis.project_type);
+    const finalMinAmount = minAmount || defaultMinAmount;
+    const finalMaxAmount = maxAmount || (defaultMinAmount * 20); // Maximum 20x le minimum
     
     let sql = `
       SELECT 
@@ -239,13 +246,13 @@ export class EstimateProjectCostTool extends BaseTool {
       FROM quotes q
       LEFT JOIN customers c ON q.customer_id = c.id
       LEFT JOIN quote_lines ql ON q.id = ql.quote_id
-      WHERE q.total_ttc >= ? AND q.total_ttc > 0
+      WHERE q.total_ttc >= ? AND q.total_ttc <= ? AND q.total_ttc > 0
       GROUP BY q.id 
       ORDER BY q.quote_date DESC
       LIMIT ?
     `;
 
-    const quotes = await database.all(sql, [minAmount, limit * 5]); // Récupérer plus pour filtrer
+    const quotes = await database.all(sql, [finalMinAmount, finalMaxAmount, limit * 3]);
 
     // Calculer la similarité et filtrer
     const projectsWithSimilarity = quotes.map(quote => {
@@ -258,7 +265,7 @@ export class EstimateProjectCostTool extends BaseTool {
     });
 
     return projectsWithSimilarity
-      .filter(p => p.similarity_score > 50) // Seuil minimum de similarité plus élevé
+      .filter(p => p.similarity_score > 30) // Seuil plus bas pour avoir plus de résultats
       .sort((a, b) => b.similarity_score - a.similarity_score)
       .slice(0, limit);
   }
@@ -314,215 +321,69 @@ export class EstimateProjectCostTool extends BaseTool {
     };
   }
 
-  calculateEstimation(briefAnalysis, similarProjects) {
+  extractPricingInsights(similarProjects) {
     if (similarProjects.length === 0) {
-      // Estimation par défaut basée sur le type de projet
-      const defaultEstimation = this.getDefaultEstimation(briefAnalysis);
       return {
-        estimated_cost_min: defaultEstimation.min,
-        estimated_cost_max: defaultEstimation.max,
-        estimated_cost_avg: defaultEstimation.avg,
-        estimated_duration_weeks: defaultEstimation.duration,
-        method: 'Estimation par défaut (aucun projet similaire trouvé)',
-        warning: 'Aucun projet similaire trouvé. Estimation basée sur des moyennes de marché.'
+        message: "Aucun projet similaire trouvé pour analyser les habitudes de tarification",
+        recommendations: [
+          "Consultez l'historique complet des devis pour ce type de projet",
+          "Utilisez les outils de recherche de devis et factures pour explorer vos tarifications passées"
+        ]
       };
     }
 
-    // Filtrer les projets avec des montants cohérents
-    const validProjects = this.filterValidProjects(similarProjects, briefAnalysis);
-    
-    if (validProjects.length === 0) {
-      const defaultEstimation = this.getDefaultEstimation(briefAnalysis);
-      return {
-        estimated_cost_min: defaultEstimation.min,
-        estimated_cost_max: defaultEstimation.max,
-        estimated_cost_avg: defaultEstimation.avg,
-        estimated_duration_weeks: defaultEstimation.duration,
-        method: 'Estimation par défaut (projets similaires non cohérents)',
-        warning: 'Les projets similaires trouvés ne sont pas cohérents. Estimation basée sur des moyennes de marché.'
-      };
-    }
-
-    // Calculer les statistiques des projets similaires valides
-    const costs = validProjects.map(p => p.total_ttc);
+    const costs = similarProjects.map(p => p.total_ttc);
     const minCost = Math.min(...costs);
     const maxCost = Math.max(...costs);
     const avgCost = costs.reduce((sum, cost) => sum + cost, 0) / costs.length;
+    const medianCost = this.calculateMedian(costs);
 
-    // Vérifier la cohérence des données
-    if (avgCost < 100 || maxCost < minCost * 2) {
-      const defaultEstimation = this.getDefaultEstimation(briefAnalysis);
-      return {
-        estimated_cost_min: defaultEstimation.min,
-        estimated_cost_max: defaultEstimation.max,
-        estimated_cost_avg: defaultEstimation.avg,
-        estimated_duration_weeks: defaultEstimation.duration,
-        method: 'Estimation par défaut (données incohérentes)',
-        warning: 'Les données des projets similaires semblent incohérentes. Estimation basée sur des moyennes de marché.'
-      };
-    }
+    // Analyser les patterns de tarification
+    const recentProjects = similarProjects.filter(p => {
+      const projectDate = new Date(p.quote_date);
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      return projectDate > sixMonthsAgo;
+    });
 
-    // Ajuster selon la complexité
-    const complexityMultiplier = this.getComplexityMultiplier(briefAnalysis.complexity);
-    const adjustedMin = Math.max(minCost * complexityMultiplier, this.getMinimumAmountForProjectType(briefAnalysis.project_type));
-    const adjustedMax = maxCost * complexityMultiplier;
-    const adjustedAvg = avgCost * complexityMultiplier;
-
-    // Estimer la durée (règle empirique: 1k€ = 1 semaine)
-    const estimatedDuration = Math.max(1, Math.ceil(adjustedAvg / 1000));
+    const recentAvgCost = recentProjects.length > 0 
+      ? recentProjects.reduce((sum, p) => sum + p.total_ttc, 0) / recentProjects.length
+      : avgCost;
 
     return {
-      estimated_cost_min: Math.round(adjustedMin),
-      estimated_cost_max: Math.round(adjustedMax),
-      estimated_cost_avg: Math.round(adjustedAvg),
-      estimated_duration_weeks: estimatedDuration,
-      method: `Basé sur ${validProjects.length} projet(s) similaire(s) de qualité`,
-      similar_projects: validProjects.map(p => ({
+      pricing_range: {
+        min: Math.round(minCost),
+        max: Math.round(maxCost),
+        average: Math.round(avgCost),
+        median: Math.round(medianCost)
+      },
+      recent_trend: {
+        recent_average: Math.round(recentAvgCost),
+        recent_projects_count: recentProjects.length,
+        trend_direction: recentAvgCost > avgCost ? 'hausse' : recentAvgCost < avgCost ? 'baisse' : 'stable'
+      },
+      project_breakdown: similarProjects.map(p => ({
         quote_number: p.quote_number,
         customer: p.customer_name,
-        cost: p.total_ttc,
+        amount: p.total_ttc,
         date: p.quote_date,
-        similarity_score: p.similarity_score
-      }))
+        similarity_score: p.similarity_score,
+        notes: p.notes?.substring(0, 100) + '...' || 'Aucune note'
+      })),
+      recommendations: [
+        "Analysez les détails des projets similaires pour comprendre la composition des tarifs",
+        "Consultez les lignes de devis pour identifier les postes récurrents",
+        "Comparez avec des projets récents pour détecter les tendances de tarification"
+      ]
     };
   }
 
-  getComplexityMultiplier(complexity) {
-    const multipliers = {
-      'simple': 0.8,
-      'moyenne': 1.0,
-      'complexe': 1.3
-    };
-    return multipliers[complexity] || 1.0;
+  calculateMedian(numbers) {
+    const sorted = [...numbers].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 
+      ? (sorted[middle - 1] + sorted[middle]) / 2
+      : sorted[middle];
   }
 
-  getDefaultEstimation(briefAnalysis) {
-    const baseEstimations = {
-      'e-commerce': { min: 5000, max: 25000, avg: 12000, duration: 12 },
-      'application_web': { min: 3000, max: 15000, avg: 8000, duration: 8 },
-      'site_vitrine': { min: 1500, max: 8000, avg: 4000, duration: 4 },
-      'mobile': { min: 4000, max: 20000, avg: 10000, duration: 10 },
-      'api': { min: 2000, max: 10000, avg: 5000, duration: 5 },
-      'cms': { min: 2000, max: 12000, avg: 6000, duration: 6 },
-      'blog': { min: 1000, max: 5000, avg: 2500, duration: 3 },
-      'portfolio': { min: 1200, max: 6000, avg: 3000, duration: 3 },
-      'autre': { min: 1000, max: 8000, avg: 4000, duration: 4 }
-    };
-
-    const base = baseEstimations[briefAnalysis.project_type] || baseEstimations['autre'];
-    const complexityMultiplier = this.getComplexityMultiplier(briefAnalysis.complexity);
-    
-    return {
-      min: Math.round(base.min * complexityMultiplier),
-      max: Math.round(base.max * complexityMultiplier),
-      avg: Math.round(base.avg * complexityMultiplier),
-      duration: Math.max(1, Math.round(base.duration * complexityMultiplier))
-    };
-  }
-
-  filterValidProjects(projects, briefAnalysis) {
-    const minAmount = this.getMinimumAmountForProjectType(briefAnalysis.project_type);
-    const maxAmount = minAmount * 10; // Maximum 10x le minimum
-    
-    return projects.filter(project => {
-      const cost = project.total_ttc;
-      return cost >= minAmount && cost <= maxAmount && cost > 0;
-    });
-  }
-
-  generateBreakdown(briefAnalysis, similarProjects) {
-    const phases = [];
-
-    // Phase 1: Conception
-    phases.push({
-      phase: 'Conception & Design',
-      description: 'Analyse des besoins, wireframes, maquettes',
-      estimated_hours: this.estimatePhaseHours('conception', briefAnalysis),
-      estimated_cost: 0 // Sera calculé
-    });
-
-    // Phase 2: Développement Frontend
-    if (briefAnalysis.project_type !== 'api') {
-      phases.push({
-        phase: 'Développement Frontend',
-        description: 'Interface utilisateur, responsive design',
-        estimated_hours: this.estimatePhaseHours('frontend', briefAnalysis),
-        estimated_cost: 0
-      });
-    }
-
-    // Phase 3: Développement Backend
-    phases.push({
-      phase: 'Développement Backend',
-      description: 'Logique métier, base de données, API',
-      estimated_hours: this.estimatePhaseHours('backend', briefAnalysis),
-      estimated_cost: 0
-    });
-
-    // Phase 4: Intégrations
-    if (briefAnalysis.features.includes('paiement') || briefAnalysis.features.includes('api')) {
-      phases.push({
-        phase: 'Intégrations',
-        description: 'Paiement, API externes, services tiers',
-        estimated_hours: this.estimatePhaseHours('integrations', briefAnalysis),
-        estimated_cost: 0
-      });
-    }
-
-    // Phase 5: Tests & Déploiement
-    phases.push({
-      phase: 'Tests & Déploiement',
-      description: 'Tests, mise en production, formation',
-      estimated_hours: this.estimatePhaseHours('tests', briefAnalysis),
-      estimated_cost: 0
-    });
-
-    // Calculer les coûts par phase (basé sur le coût total estimé)
-    const totalEstimatedCost = this.calculateEstimation(briefAnalysis, similarProjects).estimated_cost_avg;
-    const totalHours = phases.reduce((sum, phase) => sum + phase.estimated_hours, 0);
-    const hourlyRate = totalEstimatedCost / totalHours;
-
-    phases.forEach(phase => {
-      phase.estimated_cost = Math.round(phase.estimated_hours * hourlyRate);
-    });
-
-    return phases;
-  }
-
-  estimatePhaseHours(phase, briefAnalysis) {
-    const baseHours = {
-      'conception': 20,
-      'frontend': 40,
-      'backend': 60,
-      'integrations': 20,
-      'tests': 15
-    };
-
-    let hours = baseHours[phase] || 20;
-
-    // Ajuster selon la complexité
-    const complexityMultiplier = this.getComplexityMultiplier(briefAnalysis.complexity);
-    hours *= complexityMultiplier;
-
-    // Ajuster selon le type de projet
-    if (briefAnalysis.project_type === 'e-commerce') {
-      hours *= 1.5;
-    } else if (briefAnalysis.project_type === 'api') {
-      hours *= 0.7;
-    }
-
-    // Ajuster selon le nombre de fonctionnalités
-    const featureMultiplier = 1 + (briefAnalysis.features.length * 0.1);
-    hours *= featureMultiplier;
-
-    return Math.round(hours);
-  }
-
-  calculateConfidence(similarProjects) {
-    if (similarProjects.length === 0) return 'Très faible';
-    if (similarProjects.length === 1) return 'Faible';
-    if (similarProjects.length <= 3) return 'Moyenne';
-    if (similarProjects.length <= 5) return 'Bonne';
-    return 'Très bonne';
-  }
 }
