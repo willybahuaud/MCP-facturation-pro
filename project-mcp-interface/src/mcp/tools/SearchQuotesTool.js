@@ -47,22 +47,24 @@ export class SearchQuotesTool extends BaseTool {
 
       // Construire la requête SQL avec filtres
       let sql = `
-        SELECT 
+        SELECT DISTINCT
           q.*,
           c.name as customer_name,
           c.email as customer_email,
           c.city as customer_city
         FROM quotes q
         LEFT JOIN customers c ON q.customer_id = c.facturation_id
+        LEFT JOIN quote_lines ql ON q.facturation_id = ql.quote_id
         WHERE (
           q.quote_number LIKE ? OR 
           q.notes LIKE ? OR 
           c.name LIKE ? OR
-          c.email LIKE ?
+          c.email LIKE ? OR
+          ql.description LIKE ?
         )
       `;
 
-      const params = [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`];
+      const params = [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`];
 
       // Ajouter les filtres optionnels
       if (status) {

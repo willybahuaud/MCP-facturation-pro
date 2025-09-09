@@ -52,22 +52,24 @@ export class SearchInvoicesTool extends BaseTool {
 
       // Construire la requête SQL avec filtres
       let sql = `
-        SELECT 
+        SELECT DISTINCT
           i.*,
           c.name as customer_name,
           c.email as customer_email,
           c.city as customer_city
         FROM invoices i
         LEFT JOIN customers c ON i.customer_id = c.facturation_id
+        LEFT JOIN invoice_lines il ON i.facturation_id = il.invoice_id
         WHERE (
           i.invoice_number LIKE ? OR 
           i.notes LIKE ? OR 
           c.name LIKE ? OR
-          c.email LIKE ?
+          c.email LIKE ? OR
+          il.description LIKE ?
         )
       `;
 
-      const params = [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`];
+      const params = [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`];
 
       // Ajouter les filtres optionnels
       if (status) {

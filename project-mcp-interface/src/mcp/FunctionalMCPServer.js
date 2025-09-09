@@ -182,6 +182,9 @@ export class FunctionalFacturationMCPServer {
         }
       });
 
+      // Garder le processus en vie
+      process.stdin.resume();
+
     } catch (error) {
       console.error('❌ Erreur lors du démarrage du serveur MCP:', error);
       process.exit(1);
