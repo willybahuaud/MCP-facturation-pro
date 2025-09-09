@@ -9,6 +9,18 @@ import { FindSimilarProjectsAdvancedTool } from './tools/FindSimilarProjectsAdva
 import { EstimateProjectCostTool } from './tools/EstimateProjectCostTool.js';
 import { config } from '../config.js';
 
+// Custom logger to control console.error output
+const customLogger = {
+  error: (...args) => {
+    if (process.env.MCP_DEBUG === 'true') {
+      console.error(...args);
+    }
+  },
+  log: (...args) => {
+    console.log(...args);
+  }
+};
+
 /**
  * Serveur MCP fonctionnel pour Facturation.PRO
  * Utilise une approche manuelle pour gérer le protocole MCP
@@ -115,7 +127,7 @@ export class FunctionalFacturationMCPServer {
             },
           };
         } catch (error) {
-          console.error(`Erreur lors de l'exécution de l'outil ${name}:`, error);
+          customLogger.error(`Erreur lors de l'exécution de l'outil ${name}:`, error); // Utilisation du customLogger
           return {
             jsonrpc: '2.0',
             id: request.id,
@@ -144,7 +156,7 @@ export class FunctionalFacturationMCPServer {
         },
       };
     } catch (error) {
-      console.error('❌ Erreur lors du traitement de la requête:', error);
+      customLogger.error('❌ Erreur lors du traitement de la requête:', error); // Utilisation du customLogger
       return {
         jsonrpc: '2.0',
         id: request.id,
@@ -165,9 +177,9 @@ export class FunctionalFacturationMCPServer {
       await this.database.connect();
       await this.database.initialize();
 
-      console.error('🚀 Serveur MCP Facturation.PRO démarré');
-      console.error('📊 Base de données initialisée');
-      console.error('🛠️  Outils disponibles:', Array.from(this.tools.keys()).join(', '));
+      customLogger.error('🚀 Serveur MCP Facturation.PRO démarré'); // Utilisation du customLogger
+      customLogger.error('📊 Base de données initialisée'); // Utilisation du customLogger
+      customLogger.error('🛠️  Outils disponibles:', Array.from(this.tools.keys()).join(', ')); // Utilisation du customLogger
 
       // Gérer les requêtes stdin
       process.stdin.on('data', async (data) => {
@@ -176,17 +188,14 @@ export class FunctionalFacturationMCPServer {
         try {
           const request = JSON.parse(input);
           const response = await this.handleRequest(request);
-          console.log(JSON.stringify(response));
+          customLogger.log(JSON.stringify(response)); // Utilisation du customLogger pour stdout
         } catch (error) {
-          console.error('❌ Erreur parsing:', error.message);
+          customLogger.error('❌ Erreur parsing:', error.message); // Utilisation du customLogger
         }
       });
 
-      // Garder le processus en vie
-      // process.stdin.resume(); // Suppression de cette ligne car elle peut causer des conflits
-
     } catch (error) {
-      console.error('❌ Erreur lors du démarrage du serveur MCP:', error);
+      customLogger.error('❌ Erreur lors du démarrage du serveur MCP:', error); // Utilisation du customLogger
       process.exit(1);
     }
   }
@@ -197,9 +206,9 @@ export class FunctionalFacturationMCPServer {
   async stop() {
     try {
       await this.database.close();
-      console.error('🛑 Serveur MCP arrêté');
+      customLogger.error('🛑 Serveur MCP arrêté'); // Utilisation du customLogger
     } catch (error) {
-      console.error('❌ Erreur lors de l\'arrêt du serveur:', error);
+      customLogger.error('❌ Erreur lors de l\'arrêt du serveur:', error); // Utilisation du customLogger
     }
   }
 }
