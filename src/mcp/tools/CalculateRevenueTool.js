@@ -120,29 +120,60 @@ export class CalculateRevenueTool extends BaseTool {
     const endDate = `${year}-12-31`;
 
     const dateField = filter_by_payment_date ? 'paid_on' : 'invoice_date';
-    let sql = `
-      SELECT 
-        COUNT(*) as total_invoices,
-        SUM(total_ttc) as total_invoiced,
-        SUM(total_ht) as total_ht,
-        SUM(vat_amount) as total_vat,
-        AVG(total_ttc) as avg_invoice_amount,
-        COUNT(DISTINCT customer_id) as unique_customers
-      FROM invoices 
-      WHERE ${dateField} >= ? AND ${dateField} <= ?
-    `;
+    let sql;
+    
+    if (filter_by_payment_date) {
+      // Pour l'encaissé, calculer le montant réellement perçu (total_ttc - balance)
+      sql = `
+        SELECT 
+          COUNT(*) as total_invoices,
+          SUM(CASE 
+            WHEN balance IS NULL OR balance = '' THEN total_ttc 
+            ELSE total_ttc - CAST(balance AS REAL)
+          END) as total_invoiced,
+          SUM(CASE 
+            WHEN balance IS NULL OR balance = '' THEN total_ht 
+            ELSE total_ht - (total_ht * (CAST(balance AS REAL) / total_ttc))
+          END) as total_ht,
+          SUM(CASE 
+            WHEN balance IS NULL OR balance = '' THEN vat_amount 
+            ELSE vat_amount - (vat_amount * (CAST(balance AS REAL) / total_ttc))
+          END) as total_vat,
+          AVG(CASE 
+            WHEN balance IS NULL OR balance = '' THEN total_ttc 
+            ELSE total_ttc - CAST(balance AS REAL)
+          END) as avg_invoice_amount,
+          COUNT(DISTINCT customer_id) as unique_customers
+        FROM invoices 
+        WHERE ${dateField} >= ? AND ${dateField} <= ?
+          AND (balance IS NULL OR balance = '' OR CAST(balance AS REAL) < total_ttc)
+      `;
+    } else {
+      sql = `
+        SELECT 
+          COUNT(*) as total_invoices,
+          SUM(total_ttc) as total_invoiced,
+          SUM(total_ht) as total_ht,
+          SUM(vat_amount) as total_vat,
+          AVG(total_ttc) as avg_invoice_amount,
+          COUNT(DISTINCT customer_id) as unique_customers
+        FROM invoices 
+        WHERE ${dateField} >= ? AND ${dateField} <= ?
+      `;
+    }
 
     const params = [startDate, endDate];
 
     // Ajouter le filtre de statut si spécifié
-    if (filter_by_payment_date) {
-      // Si on filtre par date de paiement, on ne prend que les factures payées
-      sql += ' AND status = 1 AND paid_on IS NOT NULL';
-    } else if (status === 'paye') {
-      sql += ' AND status = 1';
-    } else if (status === 'non_paye') {
-      sql += ' AND status = 0';
+    if (!filter_by_payment_date) {
+      if (status === 'paye') {
+        sql += ' AND status = 1';
+      } else if (status === 'non_paye') {
+        sql += ' AND status = 0';
+      }
     }
+    // Note: quand filter_by_payment_date=true, on inclut toutes les factures 
+    // (même partiellement payées) et on calcule le montant encaissé via balance
 
     const result = await database.get(sql, params);
 
@@ -203,27 +234,52 @@ export class CalculateRevenueTool extends BaseTool {
     const endDate = `${year}-12-31`;
 
     const dateField = filter_by_payment_date ? 'paid_on' : 'invoice_date';
-    let sql = `
-      SELECT 
-        strftime('%m', ${dateField}) as month,
-        COUNT(*) as total_invoices,
-        SUM(total_ttc) as total_invoiced,
-        SUM(total_ht) as total_ht,
-        SUM(vat_amount) as total_vat
-      FROM invoices 
-      WHERE ${dateField} >= ? AND ${dateField} <= ?
-    `;
+    let sql;
+    
+    if (filter_by_payment_date) {
+      // Pour l'encaissé mensuel, calculer le montant réellement perçu
+      sql = `
+        SELECT 
+          strftime('%m', ${dateField}) as month,
+          COUNT(*) as total_invoices,
+          SUM(CASE 
+            WHEN balance IS NULL OR balance = '' THEN total_ttc 
+            ELSE total_ttc - CAST(balance AS REAL)
+          END) as total_invoiced,
+          SUM(CASE 
+            WHEN balance IS NULL OR balance = '' THEN total_ht 
+            ELSE total_ht - (total_ht * (CAST(balance AS REAL) / total_ttc))
+          END) as total_ht,
+          SUM(CASE 
+            WHEN balance IS NULL OR balance = '' THEN vat_amount 
+            ELSE vat_amount - (vat_amount * (CAST(balance AS REAL) / total_ttc))
+          END) as total_vat
+        FROM invoices 
+        WHERE ${dateField} >= ? AND ${dateField} <= ?
+          AND (balance IS NULL OR balance = '' OR CAST(balance AS REAL) < total_ttc)
+      `;
+    } else {
+      sql = `
+        SELECT 
+          strftime('%m', ${dateField}) as month,
+          COUNT(*) as total_invoices,
+          SUM(total_ttc) as total_invoiced,
+          SUM(total_ht) as total_ht,
+          SUM(vat_amount) as total_vat
+        FROM invoices 
+        WHERE ${dateField} >= ? AND ${dateField} <= ?
+      `;
+    }
 
     const params = [startDate, endDate];
 
     // Ajouter le filtre de statut si spécifié
-    if (filter_by_payment_date) {
-      // Si on filtre par date de paiement, on ne prend que les factures payées
-      sql += ' AND status = 1 AND paid_on IS NOT NULL';
-    } else if (status === 'paye') {
-      sql += ' AND status = 1';
-    } else if (status === 'non_paye') {
-      sql += ' AND status = 0';
+    if (!filter_by_payment_date) {
+      if (status === 'paye') {
+        sql += ' AND status = 1';
+      } else if (status === 'non_paye') {
+        sql += ' AND status = 0';
+      }
     }
 
     sql += ` GROUP BY strftime("%m", ${dateField}) ORDER BY month`;
