@@ -108,9 +108,12 @@ export class SearchInvoicesTool extends BaseTool {
         invoices.slice(0, Math.min(limit, invoices.length)).map(async (invoice) => {
           const lines = await database.getInvoiceLines(invoice.id);
           return {
-            // Informations principales de la facture
+            // Identifiants (préférer le numéro séquentiel humain)
+            display_id: invoice.invoice_ref ?? invoice.invoice_number,
+            invoice_ref: invoice.invoice_ref,
             invoice_number: invoice.invoice_number,
-            invoice_ref: invoice.invoice_ref, // Vrai numéro séquentiel de l'API
+
+            // Informations principales de la facture
             invoice_date: invoice.invoice_date,
             due_date: invoice.due_date,
             status: invoice.status,
