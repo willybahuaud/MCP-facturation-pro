@@ -80,16 +80,17 @@ export class CalculateRevenueTool extends BaseTool {
       }
 
       const dateField = filter_by_payment_date ? 'paid_on' : 'invoice_date';
-      let statusFilter = '';
-      let wherePaidOnCondition = '';
-
+      let baseWhereClause;
+      let monthlyWhereClause;
 
       if (filter_by_payment_date) {
-        wherePaidOnCondition = ` AND ${dateField} IS NOT NULL`; // Only consider invoices with a paid_on date
-      } else if (status === 'paye') {
-        statusFilter = ' AND status = 1';
-      } else if (status === 'non_paye') {
-        statusFilter = ' AND status = 0';
+        const paidAmountCheck = `(total_ttc - IIF(balance IS NULL OR balance = '', 0.0, CAST(balance AS REAL))) > 0`;
+        baseWhereClause = `WHERE COALESCE(paid_on, invoice_date) >= ? AND COALESCE(paid_on, invoice_date) <= ? AND ${paidAmountCheck}`;
+        monthlyWhereClause = `WHERE COALESCE(paid_on, invoice_date) >= ? AND COALESCE(paid_on, invoice_date) <= ? AND ${paidAmountCheck}`;
+      } else {
+        const statusFilter = status === 'paye' ? ' AND status = 1' : status === 'non_paye' ? ' AND status = 0' : '';
+        baseWhereClause = `WHERE invoice_date >= ? AND invoice_date <= ? ${statusFilter}`;
+        monthlyWhereClause = `WHERE invoice_date >= ? AND invoice_date <= ? ${statusFilter}`;
       }
 
       // Clauses pour le calcul des montants, gérant les paiements partiels si filter_by_payment_date est vrai
@@ -119,7 +120,7 @@ export class CalculateRevenueTool extends BaseTool {
           ${avgCaseTTC} as avg_invoice_amount,
           COUNT(DISTINCT customer_id) as unique_customers
         FROM invoices
-        WHERE COALESCE(paid_on, invoice_date) >= ? AND COALESCE(paid_on, invoice_date) <= ? ${statusFilter} AND (CAST(balance AS REAL) < total_ttc OR balance IS NULL OR balance = '')
+        ${baseWhereClause}
       `;
       const yearSummary = await database.get(sql, [currentStartDate, currentEndDate]);
 
@@ -132,7 +133,7 @@ export class CalculateRevenueTool extends BaseTool {
           ${sumCaseHT} as total_invoiced_ht,
           ${sumCaseVAT} as total_vat_amount
         FROM invoices
-        WHERE COALESCE(paid_on, invoice_date) >= ? AND COALESCE(paid_on, invoice_date) <= ? ${statusFilter} AND (CAST(balance AS REAL) < total_ttc OR balance IS NULL OR balance = '')
+        ${monthlyWhereClause}
         GROUP BY month
         ORDER BY month
       `;
