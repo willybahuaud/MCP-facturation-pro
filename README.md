@@ -181,6 +181,9 @@ En cas de problème :
 
 Une fois configuré, utilisez simplement des commandes naturelles dans Cursor :
 - "Recherche mes 5 plus gros devis"
-- "Trouve tous les devis de Terrena"
+- "Trouve tous les devis de tel client"
 - "Analyse les tarifs de mes produits"
 - "Factures non payées ce mois"
+- "Combien ai-je encaissé (en HT) depuis le 1er janvier 2025 ?"
+- "Ventile-moi les encaissements de 2024, mois par mois"
+- "Estime le coût d'un projet de développement d'application mobile"
