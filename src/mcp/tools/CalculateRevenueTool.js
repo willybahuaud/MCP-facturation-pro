@@ -93,17 +93,19 @@ export class CalculateRevenueTool extends BaseTool {
       }
 
       // Clauses pour le calcul des montants, gérant les paiements partiels si filter_by_payment_date est vrai
+      const paidBalance = `IIF(balance IS NULL OR balance = '', 0.0, CAST(balance AS REAL))`;
+      
       const sumCaseTTC = filter_by_payment_date
-        ? `SUM(CASE WHEN balance IS NULL OR balance = '' THEN total_ttc ELSE total_ttc - CAST(balance AS REAL) END)`
+        ? `SUM(total_ttc - ${paidBalance})`
         : `SUM(total_ttc)`;
       const sumCaseHT = filter_by_payment_date
-        ? `SUM(CASE WHEN balance IS NULL OR balance = '' THEN total_ht ELSE total_ht - (total_ht * (CAST(balance AS REAL) / total_ttc)) END)`
+        ? `SUM(total_ht - (total_ht * (${paidBalance} / IIF(total_ttc = 0, 1, total_ttc))))`
         : `SUM(total_ht)`;
       const sumCaseVAT = filter_by_payment_date
-        ? `SUM(CASE WHEN balance IS NULL OR balance = '' THEN vat_amount ELSE vat_amount - (vat_amount * (CAST(balance AS REAL) / total_ttc)) END)`
+        ? `SUM(vat_amount - (vat_amount * (${paidBalance} / IIF(total_ttc = 0, 1, total_ttc))))`
         : `SUM(vat_amount)`;
       const avgCaseTTC = filter_by_payment_date
-        ? `AVG(CASE WHEN balance IS NULL OR balance = '' THEN total_ttc ELSE total_ttc - CAST(balance AS REAL) END)`
+        ? `AVG(total_ttc - ${paidBalance})`
         : `AVG(total_ttc)`;
 
 
