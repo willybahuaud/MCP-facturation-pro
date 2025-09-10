@@ -7,6 +7,9 @@ import { CalculateRevenueTool } from './tools/CalculateRevenueTool.js';
 import { AnalyzeProjectBriefTool } from './tools/AnalyzeProjectBriefTool.js';
 import { FindSimilarProjectsAdvancedTool } from './tools/FindSimilarProjectsAdvancedTool.js';
 import { EstimateProjectCostTool } from './tools/EstimateProjectCostTool.js';
+import { CalculateQuotesRevenueTool } from './tools/CalculateQuotesRevenueTool.js';
+import { VentilerEncaissementsTool } from './tools/VentilerEncaissementsTool.js';
+import { EncaissementsPeriodeTool } from './tools/EncaissementsPeriodeTool.js';
 import { config } from '../config.js';
 import { createInterface } from 'readline';
 
@@ -44,6 +47,9 @@ export class FunctionalFacturationMCPServer {
       new AnalyzePricingTool(),
       new GetSimilarProjectsTool(),
       new CalculateRevenueTool(),
+      new CalculateQuotesRevenueTool(),
+      new VentilerEncaissementsTool(),
+      new EncaissementsPeriodeTool(),
       new AnalyzeProjectBriefTool(),
       new FindSimilarProjectsAdvancedTool(),
       new EstimateProjectCostTool()
