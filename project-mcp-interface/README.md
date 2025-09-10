@@ -61,7 +61,7 @@ Ajoutez dans `~/.cursor/mcp.json` :
 {
   "mcpServers": {
     "facturation-pro": {
-      "command": "/Users/willy/.local/bin/facturation-pro-mcp-wrapper"
+      "command": "/Users/{mon_user}/.local/bin/facturation-pro-mcp-wrapper"
     }
   }
 }
