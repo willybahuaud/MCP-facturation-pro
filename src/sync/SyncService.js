@@ -337,22 +337,20 @@ export class SyncService {
         total_ttc: invoice.total_with_vat || 0,
         vat_amount: (invoice.total_with_vat || 0) - (invoice.total || 0),
         notes: invoice.information ? invoice.information.trim() : null,
-        // Mapper le statut de paiement
-        // Logging temporaire pour diagnostiquer le statut
+        // Mapper le statut de paiement basé sur le balance
         status: (() => {
-          if (count < 3) { // Log seulement les 3 premières factures
-            console.log('Structure facture pour diagnostic:', {
-              id: invoice.id,
-              paid_on: invoice.paid_on,
-              status: invoice.status,
-              payment_status: invoice.payment_status,
-              paid: invoice.paid,
-              balance: invoice.balance,
-              total: invoice.total,
-              total_with_vat: invoice.total_with_vat
-            });
+          const balance = parseFloat(invoice.balance || 0);
+          const totalTtc = parseFloat(invoice.total_with_vat || 0);
+          
+          // Si le balance est 0 ou très proche de 0, la facture est payée
+          // Si le balance égale le total TTC, elle n'est pas payée
+          const isPaid = balance <= 0.01; // Tolérance de 1 centime pour les arrondis
+          
+          if (count < 5) { // Log les 5 premières pour vérification
+            console.log(`Facture ${invoice.id}: balance=${balance}, total_ttc=${totalTtc}, isPaid=${isPaid}`);
           }
-          return invoice.paid_on ? 1 : 0; // 1 = payée, 0 = non payée
+          
+          return isPaid ? 1 : 0; // 1 = payée, 0 = non payée
         })(),
         payment_mode: invoice.payment_mode || 0,
         paid_on: invoice.paid_on || null,
@@ -498,7 +496,16 @@ export class SyncService {
         total_ht: invoice.total || 0,
         total_ttc: invoice.total_with_vat || 0,
         vat_amount: (invoice.total_with_vat || 0) - (invoice.total || 0),
-        notes: invoice.information ? invoice.information.trim() : null
+        notes: invoice.information ? invoice.information.trim() : null,
+        // Mapper le statut de paiement basé sur le balance
+        status: (() => {
+          const balance = parseFloat(invoice.balance || 0);
+          const isPaid = balance <= 0.01; // Tolérance de 1 centime
+          return isPaid ? 1 : 0;
+        })(),
+        payment_mode: invoice.payment_mode || 0,
+        paid_on: invoice.paid_on || null,
+        balance: invoice.balance || 0
       };
 
       try {
