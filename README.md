@@ -151,7 +151,7 @@ Une fois configuré, vous aurez accès à ces outils dans Cursor :
 ## 📁 Structure du projet
 
 ```
-/Users/willy/GitHub/MCP-facturation-pro/
+/MCP-facturation-pro/
 ├── src/
 │   ├── api/                 # Client API Facturation.PRO
 │   ├── database/            # Gestion base de données SQLite (inclut la table payments)
