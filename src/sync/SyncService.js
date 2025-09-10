@@ -408,10 +408,94 @@ export class SyncService {
     const recentInvoices = await this.apiClient.getRecentInvoices();
 
     for (const quote of recentQuotes) {
-      await this.database.upsertQuote(quote);
+      // Vérifier que l'ID existe
+      if (!quote.id) {
+        console.warn('Devis récent sans ID ignoré:', quote);
+        continue;
+      }
+
+      // Utiliser un numéro par défaut si manquant
+      const quoteNumber = quote.quote_number && quote.quote_number.trim() !== '' 
+        ? quote.quote_number.trim() 
+        : `DEV-${quote.id}`;
+
+      // Vérification finale du quote_number
+      if (!quoteNumber || quoteNumber.trim() === '') {
+        console.warn('Devis récent avec quote_number invalide ignoré:', {
+          id: quote.id,
+          quote_number: quote.quote_number,
+          generated: quoteNumber
+        });
+        continue;
+      }
+
+      // Nettoyer les données du devis récent
+      const cleanQuote = {
+        ...quote,
+        quote_number: quoteNumber,
+        quote_ref: quote.quote_ref || null,
+        quote_date: quote.created_at ? quote.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+        total_ht: quote.total || 0,
+        total_ttc: quote.total_with_vat || 0,
+        vat_amount: (quote.total_with_vat || 0) - (quote.total || 0),
+        notes: quote.information ? quote.information.trim() : null
+      };
+
+      try {
+        await this.database.upsertQuote(cleanQuote);
+      } catch (error) {
+        console.error('Erreur lors de l\'insertion du devis récent:', {
+          id: quote.id,
+          quote_number: cleanQuote.quote_number,
+          error: error.message
+        });
+        throw error;
+      }
     }
     for (const invoice of recentInvoices) {
-      await this.database.upsertInvoice(invoice);
+      // Vérifier que l'ID existe
+      if (!invoice.id) {
+        console.warn('Facture récente sans ID ignorée:', invoice);
+        continue;
+      }
+
+      // Utiliser un numéro par défaut si manquant
+      const invoiceNumber = invoice.invoice_number && invoice.invoice_number.trim() !== '' 
+        ? invoice.invoice_number.trim() 
+        : `FAC-${invoice.id}`;
+
+      // Vérification finale du invoice_number
+      if (!invoiceNumber || invoiceNumber.trim() === '') {
+        console.warn('Facture récente avec invoice_number invalide ignorée:', {
+          id: invoice.id,
+          invoice_number: invoice.invoice_number,
+          generated: invoiceNumber
+        });
+        continue;
+      }
+
+      // Nettoyer les données de la facture récente
+      const cleanInvoice = {
+        ...invoice,
+        invoice_number: invoiceNumber,
+        invoice_ref: invoice.invoice_ref || null,
+        invoice_date: invoice.created_at ? invoice.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+        total_ht: invoice.total || 0,
+        total_ttc: invoice.total_with_vat || 0,
+        vat_amount: (invoice.total_with_vat || 0) - (invoice.total || 0),
+        notes: invoice.information ? invoice.information.trim() : null
+      };
+
+      try {
+        await this.database.upsertInvoice(cleanInvoice);
+      } catch (error) {
+        console.error('Erreur lors de l\'insertion de la facture récente:', {
+          id: invoice.id,
+          invoice_number: cleanInvoice.invoice_number,
+          error: error.message
+        });
+        throw error;
+      }
     }
     if (verbose) syncServiceLogger.log(chalk.green(`✅ ${recentQuotes.length} devis et ${recentInvoices.length} factures récents synchronisés`));
   }
