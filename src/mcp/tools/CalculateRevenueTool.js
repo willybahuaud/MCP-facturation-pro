@@ -39,6 +39,11 @@ export class CalculateRevenueTool extends BaseTool {
           type: 'string',
           description: 'Statut des factures (paye, non_paye, tous)',
           required: false
+        },
+        filter_by_payment_date: {
+          type: 'boolean',
+          description: 'Si true, filtre par date de paiement au lieu de date de facture (pour calculer l\'encaissé réel)',
+          required: false
         }
       }
     );
@@ -48,11 +53,11 @@ export class CalculateRevenueTool extends BaseTool {
     try {
       this.validateArgs(args);
 
-      const { year, start_year, end_year, start_date, end_date, status = 'tous' } = args;
+      const { year, start_year, end_year, start_date, end_date, status = 'tous', filter_by_payment_date = false } = args;
 
       // Si des dates spécifiques sont fournies, calculer pour cette période
       if (start_date && end_date) {
-        const periodData = await this.getCustomPeriodRevenue(database, start_date, end_date, status);
+        const periodData = await this.getCustomPeriodRevenue(database, start_date, end_date, status, filter_by_payment_date);
         return this.formatResult({
           period: {
             start_date: start_date,
@@ -64,7 +69,7 @@ export class CalculateRevenueTool extends BaseTool {
 
       // Si une année spécifique est demandée
       if (year) {
-        const yearData = await this.getYearRevenue(database, year, status);
+        const yearData = await this.getYearRevenue(database, year, status, filter_by_payment_date);
         return this.formatResult({
           year: year,
           revenue: yearData
@@ -110,10 +115,11 @@ export class CalculateRevenueTool extends BaseTool {
     }
   }
 
-  async getYearRevenue(database, year, status) {
+  async getYearRevenue(database, year, status, filter_by_payment_date = false) {
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
 
+    const dateField = filter_by_payment_date ? 'paid_on' : 'invoice_date';
     let sql = `
       SELECT 
         COUNT(*) as total_invoices,
@@ -123,13 +129,16 @@ export class CalculateRevenueTool extends BaseTool {
         AVG(total_ttc) as avg_invoice_amount,
         COUNT(DISTINCT customer_id) as unique_customers
       FROM invoices 
-      WHERE invoice_date >= ? AND invoice_date <= ?
+      WHERE ${dateField} >= ? AND ${dateField} <= ?
     `;
 
     const params = [startDate, endDate];
 
     // Ajouter le filtre de statut si spécifié
-    if (status === 'paye') {
+    if (filter_by_payment_date) {
+      // Si on filtre par date de paiement, on ne prend que les factures payées
+      sql += ' AND status = 1 AND paid_on IS NOT NULL';
+    } else if (status === 'paye') {
       sql += ' AND status = 1';
     } else if (status === 'non_paye') {
       sql += ' AND status = 0';
@@ -138,7 +147,7 @@ export class CalculateRevenueTool extends BaseTool {
     const result = await database.get(sql, params);
 
     // Récupérer aussi les détails par mois
-    const monthlyData = await this.getMonthlyRevenue(database, year, status);
+    const monthlyData = await this.getMonthlyRevenue(database, year, status, filter_by_payment_date);
 
     return {
       ...result,
@@ -189,31 +198,35 @@ export class CalculateRevenueTool extends BaseTool {
     };
   }
 
-  async getMonthlyRevenue(database, year, status) {
+  async getMonthlyRevenue(database, year, status, filter_by_payment_date = false) {
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
 
+    const dateField = filter_by_payment_date ? 'paid_on' : 'invoice_date';
     let sql = `
       SELECT 
-        strftime('%m', invoice_date) as month,
+        strftime('%m', ${dateField}) as month,
         COUNT(*) as total_invoices,
         SUM(total_ttc) as total_invoiced,
         SUM(total_ht) as total_ht,
         SUM(vat_amount) as total_vat
       FROM invoices 
-      WHERE invoice_date >= ? AND invoice_date <= ?
+      WHERE ${dateField} >= ? AND ${dateField} <= ?
     `;
 
     const params = [startDate, endDate];
 
     // Ajouter le filtre de statut si spécifié
-    if (status === 'paye') {
+    if (filter_by_payment_date) {
+      // Si on filtre par date de paiement, on ne prend que les factures payées
+      sql += ' AND status = 1 AND paid_on IS NOT NULL';
+    } else if (status === 'paye') {
       sql += ' AND status = 1';
     } else if (status === 'non_paye') {
       sql += ' AND status = 0';
     }
 
-    sql += ' GROUP BY strftime("%m", invoice_date) ORDER BY month';
+    sql += ` GROUP BY strftime("%m", ${dateField}) ORDER BY month`;
 
     const results = await database.all(sql, params);
 
