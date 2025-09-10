@@ -365,7 +365,15 @@ export class SyncService {
           return isPaid ? 1 : 0; // 1 = payée, 0 = non payée
         })(),
         payment_mode: invoice.payment_mode || 0,
-        paid_on: invoice.paid_on || null,
+        paid_on: (() => {
+          const balance = parseFloat(invoice.balance || 0);
+          const totalTtc = parseFloat(invoice.total_with_vat || 0);
+          if (invoice.paid_on) return invoice.paid_on;
+          if (invoice.payment_date && (balance <= 0.01 || (balance > 0 && balance < totalTtc))) {
+            return invoice.payment_date;
+          }
+          return null;
+        })(),
         balance: invoice.balance || 0
       };
 
@@ -516,7 +524,15 @@ export class SyncService {
           return isPaid ? 1 : 0;
         })(),
         payment_mode: invoice.payment_mode || 0,
-        paid_on: invoice.paid_on || null,
+        paid_on: (() => {
+          const balance = parseFloat(invoice.balance || 0);
+          const totalTtc = parseFloat(invoice.total_with_vat || 0);
+          if (invoice.paid_on) return invoice.paid_on;
+          if (invoice.payment_date && (balance <= 0.01 || (balance > 0 && balance < totalTtc))) {
+            return invoice.payment_date;
+          }
+          return null;
+        })(),
         balance: invoice.balance || 0
       };
 
