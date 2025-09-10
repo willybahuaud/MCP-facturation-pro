@@ -99,9 +99,12 @@ export class SearchQuotesTool extends BaseTool {
         quotes.slice(0, Math.min(limit, quotes.length)).map(async (quote) => {
           const lines = await database.getQuoteLines(quote.id);
           return {
-            // Informations principales du devis
+            // Identifiants (préférer le numéro séquentiel humain)
+            display_id: quote.quote_ref ?? quote.quote_number,
+            quote_ref: quote.quote_ref,
             quote_number: quote.quote_number,
-            quote_ref: quote.quote_ref, // Vrai numéro séquentiel de l'API
+
+            // Informations principales du devis
             quote_date: quote.quote_date,
             due_date: quote.due_date,
             status: quote.status,
