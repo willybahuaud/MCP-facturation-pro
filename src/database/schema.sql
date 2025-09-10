@@ -127,6 +127,23 @@ CREATE TABLE IF NOT EXISTS invoice_lines (
     FOREIGN KEY (product_id) REFERENCES products(id)
 );
 
+-- Table des paiements
+CREATE TABLE IF NOT EXISTS payments (
+    id INTEGER PRIMARY KEY,
+    invoice_id INTEGER NOT NULL,
+    payment_date DATE NOT NULL,
+    amount_ht REAL NOT NULL,
+    amount_ttc REAL NOT NULL,
+    amount_vat REAL NOT NULL,
+    payment_mode INTEGER,
+    note TEXT,
+    source TEXT DEFAULT 'derived', -- 'api' ou 'derived'
+    created_at DATETIME,
+    updated_at DATETIME,
+    last_sync DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+);
+
 -- Table de métadonnées de synchronisation
 CREATE TABLE IF NOT EXISTS sync_metadata (
     id INTEGER PRIMARY KEY,
@@ -149,3 +166,5 @@ CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_quote_lines_quote ON quote_lines(quote_id);
 CREATE INDEX IF NOT EXISTS idx_invoice_lines_invoice ON invoice_lines(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(payment_date);

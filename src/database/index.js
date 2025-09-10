@@ -378,6 +378,56 @@ class Database {
     
     return this.all(sql);
   }
+
+  // Paiements
+  async getInvoiceLocalIdByFacturationId(facturationId) {
+    const row = await this.get('SELECT id FROM invoices WHERE facturation_id = ?', [facturationId]);
+    return row?.id || null;
+  }
+
+  async getInvoiceByFacturationId(facturationId) {
+    return this.get('SELECT id, total_ht, total_ttc FROM invoices WHERE facturation_id = ?', [facturationId]);
+  }
+
+  async insertPayment(payment) {
+    const sql = `
+      INSERT INTO payments
+      (invoice_id, payment_date, amount_ht, amount_ttc, amount_vat, payment_mode, note, source, created_at, updated_at, last_sync)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `;
+    const params = [
+      payment.invoice_id,
+      payment.payment_date,
+      payment.amount_ht,
+      payment.amount_ttc,
+      payment.amount_vat,
+      payment.payment_mode || null,
+      payment.note || null,
+      payment.source || 'derived',
+      payment.created_at || null,
+      payment.updated_at || null
+    ];
+    return this.run(sql, params);
+  }
+
+  async deletePaymentsForInvoice(invoiceId, source = null) {
+    if (source) {
+      return this.run('DELETE FROM payments WHERE invoice_id = ? AND source = ?', [invoiceId, source]);
+    }
+    return this.run('DELETE FROM payments WHERE invoice_id = ?', [invoiceId]);
+  }
+
+  async deletePaymentsByDateRange(startDate, endDate, source = null) {
+    if (source) {
+      return this.run('DELETE FROM payments WHERE payment_date >= ? AND payment_date <= ? AND source = ?', [startDate, endDate, source]);
+    }
+    return this.run('DELETE FROM payments WHERE payment_date >= ? AND payment_date <= ?', [startDate, endDate]);
+  }
+
+  async getPaymentsCountBetween(startDate, endDate) {
+    const row = await this.get('SELECT COUNT(1) as c FROM payments WHERE payment_date >= ? AND payment_date <= ?', [startDate, endDate]);
+    return row?.c || 0;
+  }
 }
 
 export default Database;
