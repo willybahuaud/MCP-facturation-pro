@@ -84,10 +84,12 @@ export class CalculateRevenueTool extends BaseTool {
       let monthlyWhereClause;
 
       if (filter_by_payment_date) {
+        // Pour l'encaissé, filtrer par COALESCE(paid_on, invoice_date) et s'assurer qu'un montant a été encaissé
         const paidAmountCheck = `(total_ttc - IIF(balance IS NULL OR balance = '', 0.0, CAST(balance AS REAL))) > 0`;
         baseWhereClause = `WHERE COALESCE(paid_on, invoice_date) >= ? AND COALESCE(paid_on, invoice_date) <= ? AND ${paidAmountCheck}`;
         monthlyWhereClause = `WHERE COALESCE(paid_on, invoice_date) >= ? AND COALESCE(paid_on, invoice_date) <= ? AND ${paidAmountCheck}`;
       } else {
+        // Pour le facturé, filtrer par invoice_date et statut
         const statusFilter = status === 'paye' ? ' AND status = 1' : status === 'non_paye' ? ' AND status = 0' : '';
         baseWhereClause = `WHERE invoice_date >= ? AND invoice_date <= ? ${statusFilter}`;
         monthlyWhereClause = `WHERE invoice_date >= ? AND invoice_date <= ? ${statusFilter}`;
