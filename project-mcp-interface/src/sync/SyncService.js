@@ -1,6 +1,21 @@
 import { FacturationApiClient } from '../api/FacturationApiClient.js';
 import Database from '../database/index.js';
 import chalk from 'chalk';
+import { config } from '../config.js';
+import { mkdir } from 'fs/promises';
+import { dirname } from 'path';
+
+// Logger pour SyncService
+const syncServiceLogger = {
+  log: (...args) => {
+    if (process.env.MCP_DEBUG === 'true') {
+      process.stderr.write(`[SYNC SERVICE DEBUG] ${args.join(' ')}\n`);
+    }
+  },
+  error: (...args) => {
+    process.stderr.write(`[SYNC SERVICE ERROR] ${args.join(' ')}\n`);
+  }
+};
 
 /**
  * Service de synchronisation des données
@@ -10,7 +25,7 @@ export class SyncService {
   constructor() {
     this.apiClient = new FacturationApiClient();
     this.database = new Database();
-    this.isRunning = false;
+    this.isSyncing = false;
   }
 
   /**
@@ -25,44 +40,49 @@ export class SyncService {
    * Synchronise toutes les données depuis l'API
    * @param {boolean} verbose - Mode verbeux
    */
-  async syncAll(verbose = false) {
-    if (this.isRunning) {
-      console.log(chalk.yellow('⚠️  Synchronisation déjà en cours...'));
+  async syncAll(verbose = true) {
+    if (this.isSyncing) {
+      syncServiceLogger.log(chalk.yellow('⚠️  Synchronisation déjà en cours...'));
       return;
     }
 
-    this.isRunning = true;
+    this.isSyncing = true;
     const startTime = Date.now();
 
     try {
-      console.log(chalk.blue.bold('🔄 Début de la synchronisation...'));
+      syncServiceLogger.log(chalk.blue.bold('🔄 Début de la synchronisation...'));
 
-      // Test de connexion
-      if (verbose) console.log(chalk.blue('🔍 Test de connexion à l\'API...'));
-      const isConnected = await this.apiClient.testConnection();
-      if (!isConnected) {
-        throw new Error('Impossible de se connecter à l\'API Facturation.PRO');
+      // Assurer que le répertoire data existe
+      await mkdir(dirname(config.database.path), { recursive: true });
+
+      // Connecter et initialiser la base de données
+      await this.database.connect();
+      await this.database.initialize();
+
+      // Test de connexion API
+      if (verbose) syncServiceLogger.log(chalk.blue('🔍 Test de connexion à l\'API...'));
+      const apiConnected = await this.apiClient.testConnection();
+      if (!apiConnected) {
+        throw new Error('Impossible de se connecter à l\'API Facturation.PRO. Vérifiez vos identifiants.');
       }
-      if (verbose) console.log(chalk.green('✅ Connexion API établie'));
+      if (verbose) syncServiceLogger.log(chalk.green('✅ Connexion API établie'));
 
-      // Synchronisation des données de base
       await this.syncCategories(verbose);
       await this.syncCustomers(verbose);
       await this.syncProducts(verbose);
-      
-      // Synchronisation des données transactionnelles
       await this.syncQuotes(verbose);
       await this.syncInvoices(verbose);
+      await this.syncRecentData(verbose);
 
-      const duration = Math.round((Date.now() - startTime) / 1000);
-      console.log(chalk.green.bold(`✅ Synchronisation terminée en ${duration}s`));
+      syncServiceLogger.log(chalk.green.bold(`✅ Synchronisation terminée en ${((Date.now() - startTime) / 1000).toFixed(2)}s`));
 
     } catch (error) {
-      console.error(chalk.red.bold('❌ Erreur lors de la synchronisation:'));
-      console.error(chalk.red(error.message));
+      syncServiceLogger.error(chalk.red.bold('❌ Erreur lors de la synchronisation:'));
+      syncServiceLogger.error(chalk.red(error.message));
       throw error;
     } finally {
-      this.isRunning = false;
+      await this.database.close();
+      this.isSyncing = false;
     }
   }
 
@@ -70,8 +90,8 @@ export class SyncService {
    * Synchronise les catégories
    * @param {boolean} verbose - Mode verbeux
    */
-  async syncCategories(verbose = false) {
-    if (verbose) console.log(chalk.blue('📁 Synchronisation des catégories...'));
+  async syncCategories(verbose = true) {
+    if (verbose) syncServiceLogger.log(chalk.blue('📁 Synchronisation des catégories...'));
     
     const categories = await this.apiClient.getCategories();
     let count = 0;
@@ -96,15 +116,16 @@ export class SyncService {
       count++;
     }
 
-    if (verbose) console.log(chalk.green(`✅ ${count} catégories synchronisées`));
+    if (verbose) syncServiceLogger.log(chalk.green(`✅ ${count} catégories synchronisées`));
+    return categories.length;
   }
 
   /**
    * Synchronise les clients
    * @param {boolean} verbose - Mode verbeux
    */
-  async syncCustomers(verbose = false) {
-    if (verbose) console.log(chalk.blue('👥 Synchronisation des clients...'));
+  async syncCustomers(verbose = true) {
+    if (verbose) syncServiceLogger.log(chalk.blue('👥 Synchronisation des clients...'));
     
     const customers = await this.apiClient.getCustomers();
     let count = 0;
@@ -139,15 +160,16 @@ export class SyncService {
       count++;
     }
 
-    if (verbose) console.log(chalk.green(`✅ ${count} clients synchronisés`));
+    if (verbose) syncServiceLogger.log(chalk.green(`✅ ${count} clients synchronisés`));
+    return customers.length;
   }
 
   /**
    * Synchronise les produits
    * @param {boolean} verbose - Mode verbeux
    */
-  async syncProducts(verbose = false) {
-    if (verbose) console.log(chalk.blue('📦 Synchronisation des produits...'));
+  async syncProducts(verbose = true) {
+    if (verbose) syncServiceLogger.log(chalk.blue('📦 Synchronisation des produits...'));
     
     const products = await this.apiClient.getProducts();
     let count = 0;
@@ -172,15 +194,16 @@ export class SyncService {
       count++;
     }
 
-    if (verbose) console.log(chalk.green(`✅ ${count} produits synchronisés`));
+    if (verbose) syncServiceLogger.log(chalk.green(`✅ ${count} produits synchronisés`));
+    return products.length;
   }
 
   /**
    * Synchronise les devis
    * @param {boolean} verbose - Mode verbeux
    */
-  async syncQuotes(verbose = false) {
-    if (verbose) console.log(chalk.blue('📋 Synchronisation des devis...'));
+  async syncQuotes(verbose = true) {
+    if (verbose) syncServiceLogger.log(chalk.blue('📋 Synchronisation des devis...'));
     
     const quotes = await this.apiClient.getQuotes();
     let count = 0;
@@ -214,7 +237,8 @@ export class SyncService {
       count++;
     }
 
-    if (verbose) console.log(chalk.green(`✅ ${count} devis synchronisés`));
+    if (verbose) syncServiceLogger.log(chalk.green(`✅ ${count} devis synchronisés`));
+    return quotes.length;
   }
 
   /**
@@ -259,8 +283,8 @@ export class SyncService {
    * Synchronise les factures
    * @param {boolean} verbose - Mode verbeux
    */
-  async syncInvoices(verbose = false) {
-    if (verbose) console.log(chalk.blue('🧾 Synchronisation des factures...'));
+  async syncInvoices(verbose = true) {
+    if (verbose) syncServiceLogger.log(chalk.blue('🧾 Synchronisation des factures...'));
     
     const invoices = await this.apiClient.getInvoices();
     let count = 0;
@@ -299,7 +323,8 @@ export class SyncService {
       count++;
     }
 
-    if (verbose) console.log(chalk.green(`✅ ${count} factures synchronisées`));
+    if (verbose) syncServiceLogger.log(chalk.green(`✅ ${count} factures synchronisées`));
+    return invoices.length;
   }
 
   /**
@@ -344,28 +369,19 @@ export class SyncService {
    * Synchronise uniquement les données récentes
    * @param {boolean} verbose - Mode verbeux
    */
-  async syncRecent(verbose = false) {
-    if (verbose) console.log(chalk.blue('🔄 Synchronisation des données récentes...'));
+  async syncRecentData(verbose = true) {
+    if (verbose) syncServiceLogger.log(chalk.blue('🔄 Synchronisation des données récentes...'));
     
-    try {
-      // Synchroniser les devis récents
-      const recentQuotes = await this.apiClient.getRecentQuotes();
-      for (const quote of recentQuotes) {
-        await this.database.upsertQuote(quote);
-      }
-      
-      // Synchroniser les factures récentes
-      const recentInvoices = await this.apiClient.getRecentInvoices();
-      for (const invoice of recentInvoices) {
-        await this.database.upsertInvoice(invoice);
-      }
-      
-      if (verbose) console.log(chalk.green(`✅ ${recentQuotes.length} devis et ${recentInvoices.length} factures récents synchronisés`));
-      
-    } catch (error) {
-      console.error(chalk.red('Erreur lors de la synchronisation récente:'), error.message);
-      throw error;
+    const recentQuotes = await this.apiClient.getRecentQuotes();
+    const recentInvoices = await this.apiClient.getRecentInvoices();
+
+    for (const quote of recentQuotes) {
+      await this.database.upsertQuote(quote);
     }
+    for (const invoice of recentInvoices) {
+      await this.database.upsertInvoice(invoice);
+    }
+    if (verbose) syncServiceLogger.log(chalk.green(`✅ ${recentQuotes.length} devis et ${recentInvoices.length} factures récents synchronisés`));
   }
 
   /**

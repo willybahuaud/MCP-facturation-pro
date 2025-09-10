@@ -1,6 +1,18 @@
 import axios from 'axios';
 import { config } from '../config.js';
 
+// Logger pour l'API client
+const apiLogger = {
+  log: (...args) => {
+    if (process.env.MCP_DEBUG === 'true') {
+      process.stderr.write(`[API DEBUG] ${args.join(' ')}\n`);
+    }
+  },
+  error: (...args) => {
+    process.stderr.write(`[API ERROR] ${args.join(' ')}\n`);
+  }
+};
+
 /**
  * Client de base pour l'API Facturation.PRO
  * Principe SOLID : Single Responsibility - Gère uniquement la communication HTTP
@@ -41,11 +53,11 @@ export class BaseApiClient {
     // Intercepteur pour les requêtes
     this.client.interceptors.request.use(
       (config) => {
-        console.log(`🔄 ${config.method?.toUpperCase()} ${config.url}`);
+        apiLogger.log(`Request: ${config.method?.toUpperCase()} ${config.url}`);
         return config;
       },
       (error) => {
-        console.error('❌ Erreur de requête:', error.message);
+        apiLogger.error('Erreur de requête:', error.message);
         return Promise.reject(error);
       }
     );
@@ -53,7 +65,7 @@ export class BaseApiClient {
     // Intercepteur pour les réponses avec retry automatique
     this.client.interceptors.response.use(
       (response) => {
-        console.log(`✅ ${response.status} ${response.config.url}`);
+        apiLogger.log(`Response: ${response.status} ${response.config.url}`);
         return response;
       },
       async (error) => {
@@ -61,7 +73,7 @@ export class BaseApiClient {
         
         // Gestion des erreurs 429 (Too Many Requests)
         if (error.response?.status === 429) {
-          console.log(`⏳ Rate limit atteint, attente avant retry...`);
+          apiLogger.log(`Rate limit atteint, attente avant retry...`);
           
           // Attendre avant de retry
           await this._waitForRateLimit();
@@ -70,7 +82,7 @@ export class BaseApiClient {
           return this.client(originalRequest);
         }
         
-        console.error(`❌ ${error.response?.status || 'Network'} ${error.config?.url}:`, error.message);
+        apiLogger.error(`${error.response?.status || 'Network'} ${error.config?.url}:`, error.message);
         return Promise.reject(this._handleApiError(error));
       }
     );
@@ -78,7 +90,7 @@ export class BaseApiClient {
 
   async _waitForRateLimit() {
     const waitTime = 60000; // Attendre 1 minute
-    console.log(`⏳ Attente de ${waitTime/1000}s pour respecter les limites de taux...`);
+    apiLogger.log(`Attente de ${waitTime/1000}s pour respecter les limites de taux...`);
     await new Promise(resolve => setTimeout(resolve, waitTime));
     this.requestCount = 0;
     this.lastResetTime = Date.now();
@@ -97,7 +109,7 @@ export class BaseApiClient {
     if (this.requestCount >= this.maxRequestsPerMinute) {
       const waitTime = 60000 - (now - this.lastResetTime);
       if (waitTime > 0) {
-        console.log(`⏳ Limite de taux atteinte, attente de ${Math.ceil(waitTime/1000)}s...`);
+        apiLogger.log(`Limite de taux atteinte, attente de ${Math.ceil(waitTime/1000)}s...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
         this.requestCount = 0;
         this.lastResetTime = Date.now();
@@ -168,7 +180,7 @@ export class BaseApiClient {
         }
 
       } catch (error) {
-        console.error(`Erreur page ${currentPage}:`, error.message);
+        apiLogger.error(`Erreur page ${currentPage}:`, error.message);
         throw error;
       }
     } while (currentPage <= totalPages);

@@ -7,6 +7,18 @@ import { config } from '../config.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Logger pour la base de données
+const dbLogger = {
+  log: (...args) => {
+    if (process.env.MCP_DEBUG === 'true') {
+      process.stderr.write(`[DB DEBUG] ${args.join(' ')}\n`);
+    }
+  },
+  error: (...args) => {
+    process.stderr.write(`[DB ERROR] ${args.join(' ')}\n`);
+  }
+};
+
 class Database {
   constructor() {
     this.db = null;
@@ -17,10 +29,10 @@ class Database {
     return new Promise((resolve, reject) => {
       this.db = new sqlite3.Database(this.dbPath, (err) => {
         if (err) {
-          console.error('Erreur lors de la connexion à la base de données:', err);
+          dbLogger.error('Erreur lors de la connexion à la base de données:', err.message);
           reject(err);
         } else {
-          console.log('✅ Connexion à la base de données établie');
+          dbLogger.log('Connexion à la base de données établie');
           resolve();
         }
       });
@@ -36,7 +48,7 @@ class Database {
       // Diviser le schéma en requêtes individuelles
       const statements = this.parseSQLStatements(schema);
       
-      console.log(`📝 Exécution de ${statements.length} requêtes SQL...`);
+      dbLogger.log(`Exécution de ${statements.length} requêtes SQL...`);
       
       // Exécuter chaque requête individuellement
       for (let i = 0; i < statements.length; i++) {
@@ -44,18 +56,18 @@ class Database {
         if (statement.trim()) {
           try {
             await this.run(statement);
-            console.log(`✅ Requête ${i + 1}/${statements.length} exécutée`);
+            dbLogger.log(`Requête ${i + 1}/${statements.length} exécutée`);
           } catch (error) {
-            console.error(`❌ Erreur requête ${i + 1}:`, statement.substring(0, 50) + '...');
-            console.error('Erreur:', error.message);
+            dbLogger.error(`Erreur requête ${i + 1}:`, statement.substring(0, 50) + '...');
+            dbLogger.error('Erreur:', error.message);
             throw error;
           }
         }
       }
       
-      console.log('✅ Schéma de base de données initialisé');
+      dbLogger.log('Schéma de base de données initialisé');
     } catch (error) {
-      console.error('Erreur lors de l\'initialisation de la base de données:', error);
+      dbLogger.error('Erreur lors de l\'initialisation de la base de données:', error.message);
       throw error;
     }
   }
@@ -166,9 +178,10 @@ class Database {
       if (this.db) {
         this.db.close((err) => {
           if (err) {
+            dbLogger.error('Erreur lors de la fermeture de la base de données:', err.message);
             reject(err);
           } else {
-            console.log('✅ Connexion à la base de données fermée');
+            dbLogger.log('Connexion à la base de données fermée');
             resolve();
           }
         });
@@ -361,7 +374,7 @@ class Database {
       GROUP BY p.id, p.name, p.price
       HAVING quote_count > 0 OR invoice_count > 0
       ORDER BY p.name
-    `;
+   `;
     
     return this.all(sql);
   }

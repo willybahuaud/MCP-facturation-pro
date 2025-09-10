@@ -8,16 +8,18 @@ import { AnalyzeProjectBriefTool } from './tools/AnalyzeProjectBriefTool.js';
 import { FindSimilarProjectsAdvancedTool } from './tools/FindSimilarProjectsAdvancedTool.js';
 import { EstimateProjectCostTool } from './tools/EstimateProjectCostTool.js';
 import { config } from '../config.js';
+import { createInterface } from 'readline';
 
 // Custom logger to control console.error output
 const customLogger = {
   error: (...args) => {
     if (process.env.MCP_DEBUG === 'true') {
-      console.error(...args);
+      process.stderr.write(`[MCP ERROR] ${args.join(' ')}\n`);
     }
   },
-  log: (...args) => {
-    console.log(...args);
+  log: (message) => {
+    // Les messages de log pour stdout ne devraient être que des réponses JSON-RPC
+    process.stdout.write(message + '\n');
   }
 };
 
@@ -57,6 +59,12 @@ export class FunctionalFacturationMCPServer {
    */
   async handleRequest(request) {
     try {
+      // Gérer les notifications (pas de réponse requise selon JSON-RPC 2.0)
+      if (request.method && request.method.startsWith('notifications/')) {
+        // Les notifications ne doivent pas avoir de réponse
+        return null;
+      }
+
       if (request.method === 'initialize') {
         return {
           jsonrpc: '2.0',
@@ -100,6 +108,7 @@ export class FunctionalFacturationMCPServer {
         const { name, arguments: args } = request.params;
         
         if (!this.tools.has(name)) {
+          customLogger.error(`Outil inconnu: ${name} pour requête ID ${request.id}`);
           return {
             jsonrpc: '2.0',
             id: request.id,
@@ -127,26 +136,19 @@ export class FunctionalFacturationMCPServer {
             },
           };
         } catch (error) {
-          customLogger.error(`Erreur lors de l'exécution de l'outil ${name}:`, error); // Utilisation du customLogger
+          customLogger.error(`Erreur lors de l'exécution de l'outil ${name} (ID requête: ${request.id}):`, error.message);
           return {
             jsonrpc: '2.0',
             id: request.id,
-            result: {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify({
-                    success: false,
-                    error: error.message,
-                    timestamp: new Date().toISOString()
-                  }, null, 2),
-                },
-              ],
+            error: {
+              code: -32000,
+              message: `Erreur lors de l'exécution de l'outil ${name}: ${error.message}`,
             },
           };
         }
       }
 
+      customLogger.error(`Méthode non trouvée: ${request.method} pour requête ID ${request.id}`);
       return {
         jsonrpc: '2.0',
         id: request.id,
@@ -156,13 +158,15 @@ export class FunctionalFacturationMCPServer {
         },
       };
     } catch (error) {
-      customLogger.error('❌ Erreur lors du traitement de la requête:', error); // Utilisation du customLogger
+      // S'assurer que request et request.id existent avant d'essayer de les utiliser
+      const responseId = (request && request.id !== undefined) ? request.id : null;
+      customLogger.error(`Erreur interne du serveur lors du traitement de la requête (ID: ${responseId}):`, error.message);
       return {
         jsonrpc: '2.0',
-        id: request.id,
+        id: responseId,
         error: {
-          code: -32600,
-          message: 'Erreur interne du serveur',
+          code: -32603,
+          message: `Erreur interne du serveur: ${error.message}`,
         },
       };
     }
@@ -177,25 +181,54 @@ export class FunctionalFacturationMCPServer {
       await this.database.connect();
       await this.database.initialize();
 
-      customLogger.error('🚀 Serveur MCP Facturation.PRO démarré'); // Utilisation du customLogger
-      customLogger.error('📊 Base de données initialisée'); // Utilisation du customLogger
-      customLogger.error('🛠️  Outils disponibles:', Array.from(this.tools.keys()).join(', ')); // Utilisation du customLogger
+      if (process.env.MCP_DEBUG === 'true') {
+        customLogger.error('Serveur MCP Facturation.PRO démarré');
+        customLogger.error('Base de données initialisée');
+        customLogger.error('Outils disponibles:', Array.from(this.tools.keys()).join(', '));
+      }
 
-      // Gérer les requêtes stdin
-      process.stdin.on('data', async (data) => {
-        const input = data.toString().trim();
+      // Gérer les requêtes stdin (NDJSON: une requête JSON par ligne)
+      const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+      rl.on('line', async (line) => {
+        const input = line.trim();
+        if (!input) return;
+        
+        // Log temporaire pour diagnostic (TOUJOURS actif)
+        if (process.env.MCP_DEBUG === 'true') {
+          process.stderr.write(`[DIAGNOSTIC] Reçu: ${input}\n`);
+        }
         
         try {
           const request = JSON.parse(input);
+          if (process.env.MCP_DEBUG === 'true') {
+            process.stderr.write(`[DIAGNOSTIC] Requête parsée: ${JSON.stringify(request, null, 2)}\n`);
+          }
+          
           const response = await this.handleRequest(request);
-          customLogger.log(JSON.stringify(response)); // Utilisation du customLogger pour stdout
+          
+          if (response !== null) {
+            if (process.env.MCP_DEBUG === 'true') {
+              process.stderr.write(`[DIAGNOSTIC] Réponse générée: ${JSON.stringify(response, null, 2)}\n`);
+            }
+            customLogger.log(JSON.stringify(response)); // stdout
+            if (process.env.MCP_DEBUG === 'true') {
+              process.stderr.write(`[DIAGNOSTIC] Réponse envoyée sur stdout\n`);
+            }
+          } else {
+            if (process.env.MCP_DEBUG === 'true') {
+              process.stderr.write(`[DIAGNOSTIC] Notification traitée, aucune réponse nécessaire\n`);
+            }
+          }
         } catch (error) {
-          customLogger.error('❌ Erreur parsing:', error.message); // Utilisation du customLogger
+          if (process.env.MCP_DEBUG === 'true') {
+            process.stderr.write(`[DIAGNOSTIC] Erreur parsing: ${error.message}\n`);
+          }
+          customLogger.error('Erreur parsing ligne stdin:', error.message);
         }
       });
 
     } catch (error) {
-      customLogger.error('❌ Erreur lors du démarrage du serveur MCP:', error); // Utilisation du customLogger
+      customLogger.error('Erreur lors du démarrage du serveur MCP:', error.message);
       process.exit(1);
     }
   }
@@ -206,9 +239,11 @@ export class FunctionalFacturationMCPServer {
   async stop() {
     try {
       await this.database.close();
-      customLogger.error('🛑 Serveur MCP arrêté'); // Utilisation du customLogger
+      if (process.env.MCP_DEBUG === 'true') {
+        customLogger.error('Serveur MCP arrêté');
+      }
     } catch (error) {
-      customLogger.error('❌ Erreur lors de l\'arrêt du serveur:', error); // Utilisation du customLogger
+      customLogger.error('Erreur lors de l\'arrêt du serveur:', error.message);
     }
   }
 }

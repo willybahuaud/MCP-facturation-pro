@@ -1,8 +1,17 @@
 import { BaseApiClient } from './BaseApiClient.js';
 
+// Logger pour FacturationApiClient
+const facturationApiLogger = {
+  error: (...args) => {
+    if (process.env.MCP_DEBUG === 'true') {
+      process.stderr.write(`[FACTURATION API ERROR] ${args.join(' ')}\n`);
+    }
+  },
+};
+
 /**
- * Client spécialisé pour l'API Facturation.PRO
- * Principe SOLID : Open/Closed - Étend BaseApiClient sans le modifier
+ * Client spécifique pour l'API Facturation.PRO
+ * Étend BaseApiClient pour gérer les endpoints spécifiques et la logique métier
  */
 export class FacturationApiClient extends BaseApiClient {
   constructor() {
@@ -130,11 +139,11 @@ export class FacturationApiClient extends BaseApiClient {
    */
   async testConnection() {
     try {
-      await this.getCustomers();
-      return true;
+      const response = await this.get('firms');
+      return response.length > 0;
     } catch (error) {
-      console.error('Test de connexion échoué:', error.message);
-      return false;
+      facturationApiLogger.error('Test de connexion échoué:', error.message);
+      throw error;
     }
   }
 }
