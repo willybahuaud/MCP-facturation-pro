@@ -119,20 +119,20 @@ export class CalculateRevenueTool extends BaseTool {
           ${avgCaseTTC} as avg_invoice_amount,
           COUNT(DISTINCT customer_id) as unique_customers
         FROM invoices
-        WHERE ${dateField} >= ? AND ${dateField} <= ? ${statusFilter} ${wherePaidOnCondition}
+        WHERE COALESCE(paid_on, invoice_date) >= ? AND COALESCE(paid_on, invoice_date) <= ? ${statusFilter} AND (CAST(balance AS REAL) < total_ttc OR balance IS NULL OR balance = '')
       `;
       const yearSummary = await database.get(sql, [currentStartDate, currentEndDate]);
 
       // 2. Calcul de la répartition mensuelle pour l'année en cours (ou spécifiée)
       let monthlySql = `
         SELECT
-          strftime('%m', ${dateField}) as month,
+          strftime('%m', COALESCE(paid_on, invoice_date)) as month,
           COUNT(id) as total_invoices,
           ${sumCaseTTC} as total_invoiced_ttc,
           ${sumCaseHT} as total_invoiced_ht,
           ${sumCaseVAT} as total_vat_amount
         FROM invoices
-        WHERE ${dateField} >= ? AND ${dateField} <= ? ${statusFilter} ${wherePaidOnCondition}
+        WHERE COALESCE(paid_on, invoice_date) >= ? AND COALESCE(paid_on, invoice_date) <= ? ${statusFilter} AND (CAST(balance AS REAL) < total_ttc OR balance IS NULL OR balance = '')
         GROUP BY month
         ORDER BY month
       `;
