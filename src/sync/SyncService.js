@@ -346,8 +346,20 @@ export class SyncService {
           // Si le balance égale le total TTC, elle n'est pas payée
           const isPaid = balance <= 0.01; // Tolérance de 1 centime pour les arrondis
           
-          if (count < 5) { // Log les 5 premières pour vérification
-            console.log(`Facture ${invoice.id}: balance=${balance}, total_ttc=${totalTtc}, isPaid=${isPaid}`);
+          if (count < 3) { // Log les 3 premières pour voir tous les champs
+            console.log(`Facture ${invoice.id} - Champs disponibles:`, {
+              id: invoice.id,
+              balance: invoice.balance,
+              total_ttc: totalTtc,
+              isPaid: isPaid,
+              paid_on: invoice.paid_on,
+              payment_date: invoice.payment_date,
+              payment_mode: invoice.payment_mode,
+              created_at: invoice.created_at,
+              updated_at: invoice.updated_at,
+              // Afficher tous les champs pour diagnostic
+              all_fields: Object.keys(invoice).join(', ')
+            });
           }
           
           return isPaid ? 1 : 0; // 1 = payée, 0 = non payée
