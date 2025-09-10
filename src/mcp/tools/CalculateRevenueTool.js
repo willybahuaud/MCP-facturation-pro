@@ -147,7 +147,6 @@ export class CalculateRevenueTool extends BaseTool {
         FROM invoices 
         WHERE ${dateField} >= ? AND ${dateField} <= ?
           AND ${dateField} IS NOT NULL
-          AND (balance IS NULL OR balance = '' OR CAST(balance AS REAL) < total_ttc)
       `;
     } else {
       sql = `
@@ -270,7 +269,6 @@ export class CalculateRevenueTool extends BaseTool {
         FROM invoices 
         WHERE ${dateField} >= ? AND ${dateField} <= ?
           AND ${dateField} IS NOT NULL
-          AND (balance IS NULL OR balance = '' OR CAST(balance AS REAL) < total_ttc)
       `;
     } else {
       sql = `
