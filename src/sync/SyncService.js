@@ -72,6 +72,19 @@ export class SyncService {
       await this.syncProducts(verbose);
       await this.syncQuotes(verbose);
       await this.syncInvoices(verbose);
+      // Paiements: selon le mode choisi
+      const paymentsMode = config.sync.payments_mode || 'bulk';
+      if (paymentsMode === 'bulk') {
+        const today = new Date();
+        const startBulk = new Date();
+        startBulk.setFullYear(today.getFullYear() - (config.sync.payments_years || 2));
+        await this.syncSettlementsBulk(startBulk.toISOString().split('T')[0], today.toISOString().split('T')[0], verbose);
+      } else if (paymentsMode === 'per_invoice') {
+        // déjà géré dans syncInvoices/syncRecentData (appel par facture)
+      } else if (paymentsMode === 'none') {
+        if (verbose) syncServiceLogger.log(chalk.yellow('⏭️  Synchronisation des paiements désactivée (mode=none).'));
+      }
+
       await this.syncRecentData(verbose);
 
       syncServiceLogger.log(chalk.green.bold(`✅ Synchronisation terminée en ${((Date.now() - startTime) / 1000).toFixed(2)}s`));
@@ -379,6 +392,11 @@ export class SyncService {
 
       // Synchroniser la facture
       await this.database.upsertInvoice(cleanInvoice);
+
+      // Synchroniser les règlements de la facture (si mode per_invoice)
+      if ((config.sync.payments_mode || 'bulk') === 'per_invoice') {
+        await this.syncPaymentsForInvoice(cleanInvoice);
+      }
       
       // Synchroniser les lignes de la facture si elles sont incluses dans la réponse
       if (invoice.items && Array.isArray(invoice.items) && invoice.items.length > 0) {
@@ -538,6 +556,7 @@ export class SyncService {
 
       try {
         await this.database.upsertInvoice(cleanInvoice);
+        await this.syncPaymentsForInvoice(cleanInvoice);
       } catch (error) {
         console.error('Erreur lors de l\'insertion de la facture récente:', {
           id: invoice.id,
@@ -548,6 +567,186 @@ export class SyncService {
       }
     }
     if (verbose) syncServiceLogger.log(chalk.green(`✅ ${recentQuotes.length} devis et ${recentInvoices.length} factures récents synchronisés`));
+
+    // Bulk règlements récents (90 jours) si mode bulk
+    if ((config.sync.payments_mode || 'bulk') === 'bulk') {
+      const endRecent = new Date();
+      const startRecent = new Date();
+      startRecent.setDate(endRecent.getDate() - 90);
+      await this.syncSettlementsBulk(startRecent.toISOString().split('T')[0], endRecent.toISOString().split('T')[0], verbose);
+    }
+  }
+
+  /**
+   * Synchronise les paiements pour une facture donnée
+   * - Tente d'utiliser l'API si disponible
+   * - Sinon, génère un paiement dérivé à partir de balance/paid_on/payment_date/updated_at
+   */
+  async syncPaymentsForInvoice(invoice) {
+    try {
+      // Retrouver l'ID local de la facture
+      const localInvoiceId = await this.database.getInvoiceLocalIdByFacturationId(invoice.id);
+      if (!localInvoiceId) return; // facture pas (encore) en base
+
+      // Nettoyer les paiements dérivés existants pour éviter les doublons
+      await this.database.deletePaymentsForInvoice(localInvoiceId, 'derived');
+
+      // 1) Essayer de récupérer les règlements depuis l'API
+      const apiPayments = await this.apiClient.getInvoiceSettlements(invoice.id);
+      if (Array.isArray(apiPayments) && apiPayments.length > 0) {
+        // Supprimer tous les paiements existants (API + dérivés) puis insérer ceux de l'API
+        await this.database.deletePaymentsForInvoice(localInvoiceId);
+        for (const p of apiPayments) {
+          const paidTtc = parseFloat(p.amount_with_vat || p.amount_ttc || p.amount || 0) || 0;
+          // Autoriser les remboursements (montants négatifs)
+          if (paidTtc === 0) continue;
+          const ratio = (() => {
+            const totalTtc = parseFloat(invoice.total_ttc || 0);
+            const totalHt = parseFloat(invoice.total_ht || 0);
+            if (totalTtc <= 0) return { ht: 0, vat: 0 };
+            const amount_ht = paidTtc * (totalHt / totalTtc);
+            const amount_vat = paidTtc - amount_ht;
+            return { ht: amount_ht, vat: amount_vat };
+          })();
+          await this.database.insertPayment({
+            invoice_id: localInvoiceId,
+            payment_date: (p.payment_date || p.date || p.paid_on || invoice.paid_on || invoice.payment_date || invoice.updated_at || invoice.invoice_date).split('T')[0],
+            amount_ttc: paidTtc,
+            amount_ht: parseFloat(p.amount_ht || p.amount_excl_vat || ratio.ht),
+            amount_vat: parseFloat(p.amount_vat || (paidTtc - (parseFloat(p.amount_ht || p.amount_excl_vat || ratio.ht)))),
+            payment_mode: p.payment_mode || p.mode || invoice.payment_mode || null,
+            note: p.note || p.notes || 'API',
+            source: 'api',
+            created_at: p.created_at || null,
+            updated_at: p.updated_at || null,
+          });
+        }
+        return;
+      }
+
+      // 2) Fallback dérivé (fiable uniquement si une date de paiement explicite existe)
+      const totalTtc = parseFloat(invoice.total_ttc || 0);
+      const totalHt = parseFloat(invoice.total_ht || 0);
+      const balance = parseFloat(invoice.balance || 0);
+
+      // Cas A: facture soldée avec paid_on -> enregistrer le montant total (positif ou négatif)
+      if (invoice.status === 1 && invoice.paid_on) {
+        await this.database.insertPayment({
+          invoice_id: localInvoiceId,
+          payment_date: invoice.paid_on.split('T')[0],
+          amount_ttc: totalTtc,
+          amount_ht: totalHt,
+          amount_vat: totalTtc - totalHt,
+          payment_mode: invoice.payment_mode || null,
+          note: 'derived-paid_on',
+          source: 'derived',
+          created_at: null,
+          updated_at: null,
+        });
+        return;
+      }
+
+      // Cas B: paiement partiel avec payment_date connue -> enregistrer le montant réglé actuel (positif seulement)
+      const paidTtc = totalTtc - balance;
+      if (paidTtc > 0 && invoice.payment_date) {
+        const amount_ht = totalTtc !== 0 ? paidTtc * (totalHt / totalTtc) : 0;
+        const amount_vat = paidTtc - amount_ht;
+        await this.database.insertPayment({
+          invoice_id: localInvoiceId,
+          payment_date: invoice.payment_date.split('T')[0],
+          amount_ttc: paidTtc,
+          amount_ht,
+          amount_vat,
+          payment_mode: invoice.payment_mode || null,
+          note: 'derived-payment_date',
+          source: 'derived',
+          created_at: null,
+          updated_at: null,
+        });
+        return;
+      }
+
+      // Sinon, s'abstenir (pas de date de paiement fiable)
+      return;
+    } catch (error) {
+      console.error('Erreur syncPaymentsForInvoice:', error.message);
+    }
+  }
+
+  /**
+   * Synchronise les règlements en bulk via settlements/find (ou reglements/find)
+   */
+  async syncSettlementsBulk(startDate, endDate, verbose = true) {
+    try {
+      if (verbose) syncServiceLogger.log(chalk.blue(`💳 Synchronisation des règlements du ${startDate} au ${endDate}...`));
+      const settlements = await this.apiClient.findSettlements({ payment_date_from: startDate, payment_date_to: endDate });
+      if (!Array.isArray(settlements) || settlements.length === 0) {
+        if (verbose) syncServiceLogger.log(chalk.yellow('Aucun règlement trouvé via l’API pour la période.'));
+        return 0;
+      }
+
+      // Option: supprimer d’abord tous les paiements API dans la plage de dates
+      await this.database.deletePaymentsByDateRange(startDate, endDate, 'api');
+
+      // Pour éviter de supprimer plusieurs fois les paiements d’une même facture
+      const clearedInvoices = new Set();
+      let inserted = 0;
+
+      for (const s of settlements) {
+        // Trouver l’ID facture (remote) et la date
+        const remoteInvoiceId = s.invoice_id || s.invoice?.id || s.invoice_facturation_id || s.invoice_facture_id;
+        const paymentDateRaw = s.payment_date || s.date || s.paid_on || s.created_at;
+        const paidTtc = parseFloat(s.amount_with_vat || s.amount_ttc || s.amount || 0) || 0;
+        const amountHtRaw = s.amount_ht || s.amount_excl_vat;
+        const amountVatRaw = s.amount_vat;
+        const paymentMode = s.payment_mode || s.mode || null;
+        const note = s.note || s.notes || null;
+
+        // Accepter les remboursements (montants négatifs) mais ignorer strictement les zéros
+        if (!remoteInvoiceId || !paymentDateRaw || paidTtc === 0) continue;
+
+        const payment_date = String(paymentDateRaw).split('T')[0];
+
+        // Récupérer la facture locale pour ratio HT/TVA si nécessaire
+        const invRow = await this.database.getInvoiceByFacturationId(remoteInvoiceId);
+        if (!invRow || !invRow.id) continue; // facture non sync
+
+        if (!clearedInvoices.has(invRow.id)) {
+          await this.database.deletePaymentsForInvoice(invRow.id); // Purge (api + derived) avant réécriture
+          clearedInvoices.add(invRow.id);
+        }
+
+        let amount_ht = parseFloat(amountHtRaw || 0) || 0;
+        let amount_vat = parseFloat(amountVatRaw || 0);
+        if (!Number.isFinite(amount_ht) || amount_ht === 0) {
+          // Calculer au prorata si HT manquant
+          const totalTtc = parseFloat(invRow.total_ttc || 0);
+          const totalHt = parseFloat(invRow.total_ht || 0);
+          amount_ht = totalTtc !== 0 ? paidTtc * (totalHt / totalTtc) : 0;
+        }
+        if (!Number.isFinite(amount_vat)) amount_vat = paidTtc - amount_ht;
+
+        await this.database.insertPayment({
+          invoice_id: invRow.id,
+          payment_date,
+          amount_ttc: paidTtc,
+          amount_ht,
+          amount_vat,
+          payment_mode: paymentMode,
+          note,
+          source: 'api',
+          created_at: s.created_at || null,
+          updated_at: s.updated_at || null,
+        });
+        inserted++;
+      }
+
+      if (verbose) syncServiceLogger.log(chalk.green(`✅ ${inserted} règlements synchronisés (bulk)`));
+      return inserted;
+    } catch (error) {
+      syncServiceLogger.error('Erreur lors de la synchronisation bulk des règlements:', error.message);
+      return 0;
+    }
   }
 
   /**

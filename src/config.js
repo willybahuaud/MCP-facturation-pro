@@ -26,7 +26,11 @@ export const config = {
   // Configuration synchronisation
   sync: {
     interval: parseInt(process.env.SYNC_INTERVAL) || 60, // en minutes
-    batchSize: 50 // nombre d'éléments par requête
+    batchSize: 50, // nombre d'éléments par requête
+    // Mode de synchronisation des paiements: 'bulk' (par défaut), 'none', ou 'per_invoice'
+    payments_mode: process.env.SYNC_PAYMENTS_MODE || 'bulk',
+    // Nombre d'années à couvrir pour le bulk
+    payments_years: parseInt(process.env.SYNC_PAYMENTS_YEARS || '2', 10)
   },
   
   // Configuration MCP
