@@ -209,6 +209,12 @@ export class SyncService {
     let count = 0;
 
     for (const quote of quotes) {
+      // Vérifier que l'ID existe
+      if (!quote.id) {
+        console.warn('Devis sans ID ignoré:', quote);
+        continue;
+      }
+
       // Utiliser un numéro par défaut si manquant
       const quoteNumber = quote.quote_number && quote.quote_number.trim() !== '' 
         ? quote.quote_number.trim() 
@@ -290,6 +296,12 @@ export class SyncService {
     let count = 0;
 
     for (const invoice of invoices) {
+      // Vérifier que l'ID existe
+      if (!invoice.id) {
+        console.warn('Facture sans ID ignorée:', invoice);
+        continue;
+      }
+
       // Utiliser un numéro par défaut si manquant
       const invoiceNumber = invoice.invoice_number && invoice.invoice_number.trim() !== '' 
         ? invoice.invoice_number.trim() 
