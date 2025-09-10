@@ -338,7 +338,22 @@ export class SyncService {
         vat_amount: (invoice.total_with_vat || 0) - (invoice.total || 0),
         notes: invoice.information ? invoice.information.trim() : null,
         // Mapper le statut de paiement
-        status: invoice.paid_on ? 1 : 0, // 1 = payée, 0 = non payée
+        // Logging temporaire pour diagnostiquer le statut
+        status: (() => {
+          if (count < 3) { // Log seulement les 3 premières factures
+            console.log('Structure facture pour diagnostic:', {
+              id: invoice.id,
+              paid_on: invoice.paid_on,
+              status: invoice.status,
+              payment_status: invoice.payment_status,
+              paid: invoice.paid,
+              balance: invoice.balance,
+              total: invoice.total,
+              total_with_vat: invoice.total_with_vat
+            });
+          }
+          return invoice.paid_on ? 1 : 0; // 1 = payée, 0 = non payée
+        })(),
         payment_mode: invoice.payment_mode || 0,
         paid_on: invoice.paid_on || null,
         balance: invoice.balance || 0
