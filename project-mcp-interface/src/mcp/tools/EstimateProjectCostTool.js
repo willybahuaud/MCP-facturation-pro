@@ -259,6 +259,7 @@ export class EstimateProjectCostTool extends BaseTool {
       const similarity = this.calculateSimilarity(briefAnalysis, quote);
       return {
         ...quote,
+        display_id: quote.quote_ref ?? quote.quote_number,
         similarity_score: similarity.score,
         similarity_reasons: similarity.reasons
       };
@@ -399,6 +400,7 @@ export class EstimateProjectCostTool extends BaseTool {
         trend_direction: recentAvgCost > avgCost ? 'hausse' : recentAvgCost < avgCost ? 'baisse' : 'stable'
       },
       project_breakdown: similarProjects.map(p => ({
+        display_id: p.display_id ?? (p.quote_ref ?? p.quote_number),
         quote_number: p.quote_number,
         customer: p.customer_name,
         amount: p.total_ttc,

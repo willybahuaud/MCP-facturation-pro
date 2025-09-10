@@ -259,6 +259,7 @@ export class FindSimilarProjectsAdvancedTool extends BaseTool {
       const similarity = this.calculateSimilarity(briefAnalysis, quote);
       return {
         ...quote,
+        display_id: quote.quote_ref ?? quote.quote_number,
         similarity_score: similarity.score,
         similarity_reasons: similarity.reasons
       };
