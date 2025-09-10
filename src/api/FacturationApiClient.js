@@ -146,4 +146,55 @@ export class FacturationApiClient extends BaseApiClient {
       throw error;
     }
   }
+
+  /**
+   * Récupère les règlements d'une facture.
+   * Essaie d'abord l'endpoint en/"settlements", puis fr/"reglements".
+   * @param {number} invoiceId
+   * @returns {Promise<Array>} Liste des règlements
+   */
+  async getInvoiceSettlements(invoiceId) {
+    // Tentative 1: anglais
+    try {
+      const endpoint = this.buildUrl(`invoices/${invoiceId}/settlements`);
+      const res = await this.get(endpoint);
+      if (Array.isArray(res)) return res;
+    } catch (error) {
+      facturationApiLogger.error(`settlements (en) indisponible pour invoice ${invoiceId}:`, error.message);
+    }
+    // Tentative 2: français
+    try {
+      const endpoint = this.buildUrl(`invoices/${invoiceId}/reglements`);
+      const res = await this.get(endpoint);
+      if (Array.isArray(res)) return res;
+    } catch (error) {
+      facturationApiLogger.error(`reglements (fr) indisponible pour invoice ${invoiceId}:`, error.message);
+    }
+    return [];
+  }
+
+  /**
+   * Recherche de règlements (toutes factures) via endpoint find
+   * @param {Object} filters - ex: { created_at_from, created_at_to, payment_date_from, payment_date_to, invoice_id }
+   * @returns {Promise<Array>} Liste des règlements
+   */
+  async findSettlements(filters = {}) {
+    // Tentative 1: anglais
+    try {
+      const endpoint = this.buildUrl('settlements/find');
+      const res = await this.get(endpoint, filters);
+      if (Array.isArray(res)) return res;
+    } catch (error) {
+      facturationApiLogger.error('settlements/find (en) indisponible:', error.message);
+    }
+    // Tentative 2: français
+    try {
+      const endpoint = this.buildUrl('reglements/find');
+      const res = await this.get(endpoint, filters);
+      if (Array.isArray(res)) return res;
+    } catch (error) {
+      facturationApiLogger.error('reglements/find (fr) indisponible:', error.message);
+    }
+    return [];
+  }
 }
