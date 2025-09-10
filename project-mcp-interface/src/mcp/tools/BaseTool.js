@@ -25,6 +25,8 @@ export class BaseTool {
    * @returns {boolean} True si valide
    */
   validateArgs(args) {
+    // Tolérer les appels sans arguments (sera validé contre les requis)
+    args = args || {};
     if (!this.parameters) return true;
 
     for (const [key, param] of Object.entries(this.parameters)) {

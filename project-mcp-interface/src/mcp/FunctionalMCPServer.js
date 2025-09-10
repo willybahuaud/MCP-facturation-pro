@@ -83,17 +83,29 @@ export class FunctionalFacturationMCPServer {
       }
 
       if (request.method === 'tools/list') {
-        const toolsList = Array.from(this.tools.values()).map(tool => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: {
-            type: 'object',
-            properties: tool.parameters || {},
-            required: Object.keys(tool.parameters || {}).filter(
-              key => tool.parameters[key].required
-            ),
-          },
-        }));
+        const toolsList = Array.from(this.tools.values()).map(tool => {
+          // Construire un schéma JSON valide et strict (sans "required" dans les propriétés)
+          const properties = {};
+          const required = [];
+          if (tool.parameters) {
+            for (const [key, param] of Object.entries(tool.parameters)) {
+              const { required: isRequired, ...rest } = param || {};
+              properties[key] = rest;
+              if (isRequired) required.push(key);
+            }
+          }
+
+          return {
+            name: tool.name,
+            description: tool.description,
+            inputSchema: {
+              type: 'object',
+              additionalProperties: false,
+              properties,
+              required,
+            },
+          };
+        });
 
         return {
           jsonrpc: '2.0',
@@ -122,7 +134,7 @@ export class FunctionalFacturationMCPServer {
         const tool = this.tools.get(name);
         
         try {
-          const result = await tool.execute(args, this.database);
+          const result = await tool.execute(args || {}, this.database);
           return {
             jsonrpc: '2.0',
             id: request.id,
