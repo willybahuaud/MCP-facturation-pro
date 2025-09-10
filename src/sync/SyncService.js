@@ -220,6 +220,16 @@ export class SyncService {
         ? quote.quote_number.trim() 
         : `DEV-${quote.id}`;
 
+      // Vérification finale du quote_number
+      if (!quoteNumber || quoteNumber.trim() === '') {
+        console.warn('Devis avec quote_number invalide ignoré:', {
+          id: quote.id,
+          quote_number: quote.quote_number,
+          generated: quoteNumber
+        });
+        continue;
+      }
+
       // Nettoyer les données du devis
       const cleanQuote = {
         ...quote,
@@ -233,7 +243,17 @@ export class SyncService {
       };
 
       // Synchroniser le devis
-      await this.database.upsertQuote(cleanQuote);
+      try {
+        await this.database.upsertQuote(cleanQuote);
+      } catch (error) {
+        console.error('Erreur lors de l\'insertion du devis:', {
+          id: quote.id,
+          quote_number: cleanQuote.quote_number,
+          error: error.message,
+          cleanQuote: JSON.stringify(cleanQuote, null, 2)
+        });
+        throw error;
+      }
       
       // Synchroniser les lignes du devis si elles sont incluses dans la réponse
       if (quote.items && Array.isArray(quote.items) && quote.items.length > 0) {
