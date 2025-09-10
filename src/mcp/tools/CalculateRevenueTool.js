@@ -127,26 +127,14 @@ export class CalculateRevenueTool extends BaseTool {
       sql = `
         SELECT 
           COUNT(*) as total_invoices,
-          SUM(CASE 
-            WHEN balance IS NULL OR balance = '' THEN total_ttc 
-            ELSE total_ttc - CAST(balance AS REAL)
-          END) as total_invoiced,
-          SUM(CASE 
-            WHEN balance IS NULL OR balance = '' THEN total_ht 
-            ELSE total_ht - (total_ht * (CAST(balance AS REAL) / total_ttc))
-          END) as total_ht,
-          SUM(CASE 
-            WHEN balance IS NULL OR balance = '' THEN vat_amount 
-            ELSE vat_amount - (vat_amount * (CAST(balance AS REAL) / total_ttc))
-          END) as total_vat,
-          AVG(CASE 
-            WHEN balance IS NULL OR balance = '' THEN total_ttc 
-            ELSE total_ttc - CAST(balance AS REAL)
-          END) as avg_invoice_amount,
+          SUM(total_ttc) as total_invoiced,
+          SUM(total_ht) as total_ht,
+          SUM(vat_amount) as total_vat,
+          AVG(total_ttc) as avg_invoice_amount,
           COUNT(DISTINCT customer_id) as unique_customers
         FROM invoices 
         WHERE ${dateField} >= ? AND ${dateField} <= ?
-          AND (balance IS NULL OR balance = '' OR CAST(balance AS REAL) < total_ttc)
+          AND ${dateField} IS NOT NULL
       `;
     } else {
       sql = `
@@ -256,7 +244,7 @@ export class CalculateRevenueTool extends BaseTool {
           END) as total_vat
         FROM invoices 
         WHERE ${dateField} >= ? AND ${dateField} <= ?
-          AND (balance IS NULL OR balance = '' OR CAST(balance AS REAL) < total_ttc)
+          AND ${dateField} IS NOT NULL
       `;
     } else {
       sql = `
