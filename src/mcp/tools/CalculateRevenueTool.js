@@ -124,6 +124,8 @@ export class CalculateRevenueTool extends BaseTool {
         FROM invoices
         ${baseWhereClause}
       `;
+      console.log('DEBUG: SQL pour les totaux annuels:', sql);
+      console.log('DEBUG: Paramètres pour les totaux annuels:', [currentStartDate, currentEndDate]);
       const yearSummary = await database.get(sql, [currentStartDate, currentEndDate]);
 
       // 2. Calcul de la répartition mensuelle pour l'année en cours (ou spécifiée)
@@ -139,6 +141,8 @@ export class CalculateRevenueTool extends BaseTool {
         GROUP BY month
         ORDER BY month
       `;
+      console.log('DEBUG: SQL pour la répartition mensuelle:', monthlySql);
+      console.log('DEBUG: Paramètres pour la répartition mensuelle:', [`${calculatedYear}-01-01`, `${calculatedYear}-12-31`]);
       const monthlyResults = await database.all(monthlySql, [`${calculatedYear}-01-01`, `${calculatedYear}-12-31`]);
 
       // Remplir les mois manquants
