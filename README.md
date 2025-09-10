@@ -151,7 +151,7 @@ Une fois configuré, vous aurez accès à ces outils dans Cursor :
 ## 📁 Structure du projet
 
 ```
-project-mcp-interface/
+/Users/willy/GitHub/MCP-facturation-pro/
 ├── src/
 │   ├── api/                 # Client API Facturation.PRO
 │   ├── database/            # Gestion base de données SQLite (inclut la table payments)
@@ -160,7 +160,8 @@ project-mcp-interface/
 ├── data/
 │   └── facturation.db       # Base de données locale
 ├── scripts/
-│   └── install-global.js    # Script d'installation globale
+│   ├── install-global.js    # Script d'installation globale
+│   └── uninstall-global.js  # Script de désinstallation globale
 └── README.md
 ```
 
