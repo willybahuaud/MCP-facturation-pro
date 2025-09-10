@@ -154,7 +154,7 @@ Une fois configuré, vous aurez accès à ces outils dans Cursor :
 project-mcp-interface/
 ├── src/
 │   ├── api/                 # Client API Facturation.PRO
-│   ├── database/            # Gestion base de données SQLite
+│   ├── database/            # Gestion base de données SQLite (inclut la table payments)
 │   ├── mcp/                 # Serveur MCP et outils
 │   └── sync/                # Service de synchronisation
 ├── data/
